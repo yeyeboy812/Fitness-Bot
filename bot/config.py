@@ -7,12 +7,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-    # Telegram bot
+    # Telegram
     bot_token: SecretStr
 
-    # Database — SQLite by default, PostgreSQL when DB_HOST is set
+    # Database
     db_host: str = ""
     db_port: int = 5432
     db_user: str = "postgres"
@@ -27,10 +31,11 @@ class Settings(BaseSettings):
                 f"{self.db_password.get_secret_value()}@"
                 f"{self.db_host}:{self.db_port}/{self.db_name}"
             )
-        # Local SQLite fallback
+
         return f"sqlite+aiosqlite:///{BASE_DIR / 'data' / 'bot.db'}"
 
-    # Redis
+    # Redis / FSM
+    use_redis: bool = False
     redis_host: str = "localhost"
     redis_port: int = 6379
 

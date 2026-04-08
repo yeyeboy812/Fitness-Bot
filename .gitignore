@@ -1,12 +1,23 @@
 .env
+
 __pycache__/
 *.pyc
+
 .venv/
 venv/
+
 *.egg-info/
 dist/
 build/
+
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
-alembic/versions/
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+data/*.db
+data/*.db-shm
+data/*.db-wal
