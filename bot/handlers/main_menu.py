@@ -24,6 +24,7 @@ knows the action → opener mapping.
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -41,6 +42,9 @@ from bot.handlers.subscription import open_subscription
 from bot.handlers.workout.start_workout import open_workout
 from bot.keyboards.inline import confirm_exit_kb, main_menu_kb
 from bot.models.user import User
+from bot.repositories.meal import MealRepository
+from bot.schemas.nutrition import DailySummary
+from bot.services.nutrition import NutritionService
 from bot.states.app import INLINE_MENU_ACTIONS, is_interruptible
 
 logger = logging.getLogger(__name__)
@@ -55,7 +59,11 @@ _VALID_ACTIONS = frozenset(INLINE_MENU_ACTIONS.values())
 # Reply "🎯 Меню" press — opens the inline action picker
 # ---------------------------------------------------------------------------
 @router.message(MainMenuFilter())
-async def on_main_menu_button(message: Message, user: User) -> None:
+async def on_main_menu_button(
+    message: Message,
+    user: User,
+    session: AsyncSession,
+) -> None:
     """Open the inline action picker as a fresh message.
 
     Two messages are sent: the first removes the persistent reply keyboard
@@ -69,7 +77,18 @@ async def on_main_menu_button(message: Message, user: User) -> None:
     The interruption prompt fires only when a concrete action is picked.
     """
     logger.info("menu_open user=%s", user.id)
-    header_lines = ["<b>Главное меню</b>", "", "Выбери раздел:"]
+
+    service = NutritionService(MealRepository(session))
+    summary = await service.get_daily_summary(
+        user.id,
+        date.today(),
+        calorie_norm=user.calorie_norm,
+        protein_norm=user.protein_norm,
+        fat_norm=user.fat_norm,
+        carb_norm=user.carb_norm,
+    )
+    greeting = _progress_greeting(summary)
+
     sections = [
         "🍽 Питание и дневник",
         "🏋️ Тренировки и прогресс",
@@ -78,8 +97,38 @@ async def on_main_menu_button(message: Message, user: User) -> None:
     if is_admin(user.id):
         sections.append("🔐 Админ-инструменты")
 
-    await message.answer("\n".join(header_lines), reply_markup=ReplyKeyboardRemove())
+    await message.answer(greeting, reply_markup=ReplyKeyboardRemove())
     await message.answer("\n".join(sections), reply_markup=main_menu_kb(user.id))
+
+
+def _progress_greeting(summary: DailySummary) -> str:
+    """Pick a motivational header based on today's nutrition progress.
+
+    Tiers (by calorie norm, with macro overshoot short-circuiting to the
+    'stop' tier):
+      • overshoot on any macro OR calories ≥ 100%  → stop
+      • calories ≥ 80% of norm                      → almost there
+      • any calories logged today                   → keep going
+      • nothing logged yet                          → start
+    """
+    cal = summary.total_calories
+    norm = summary.calorie_norm or 0
+
+    macros = [
+        (summary.total_calories, summary.calorie_norm),
+        (summary.total_protein, summary.protein_norm),
+        (summary.total_fat, summary.fat_norm),
+        (summary.total_carbs, summary.carb_norm),
+    ]
+    overshoot = any(current > target for current, target in macros if target)
+
+    if norm and (overshoot or cal >= norm):
+        return "✋ Остановись-ка, бейба."
+    if norm and cal >= norm * 0.8:
+        return "🎯 Ты уже на пороге большого события — сделай это!\n\n👇 Выбери раздел:"
+    if cal > 0:
+        return "🔥 Молодец, ты можешь ещё больше!\n\n👇 Выбери раздел:"
+    return "💪 Ну что, пора становиться сильным!\n\n👇 Выбери раздел:"
 
 
 # ---------------------------------------------------------------------------
