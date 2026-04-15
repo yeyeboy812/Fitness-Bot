@@ -15,12 +15,18 @@ def format_nutrition_line(cal: float, protein: float, fat: float, carbs: float) 
 
 
 def _progress_bar(current: float, target: float | None, width: int = 10) -> str:
-    """Text-based progress bar."""
+    """Emoji-square progress bar. Renders identically across Telegram clients.
+
+    Uses 🟩 for filled cells and ⬜ for empty. Fill caps at ``width`` even when
+    ``current`` overshoots the target — the numeric percentage still reflects
+    the real ratio so overshoots stay visible.
+    """
     if not target or target <= 0:
         return ""
-    ratio = min(current / target, 1.0)
-    filled = round(ratio * width)
-    return "█" * filled + "░" * (width - filled) + f" {ratio:.0%}"
+    ratio = current / target
+    filled = min(round(ratio * width), width)
+    bar = "🟩" * filled + "⬜" * (width - filled)
+    return f"{bar} {int(ratio * 100)}%"
 
 
 def format_daily_summary(summary: "DailySummary", meals: list["Meal"]) -> str:
@@ -35,20 +41,17 @@ def format_daily_summary(summary: "DailySummary", meals: list["Meal"]) -> str:
         lines.append(cal_bar)
     lines.append("")
 
-    # Macros
-    pro_str = f"{summary.total_protein:.0f}"
-    if summary.protein_norm:
-        pro_str += f" / {summary.protein_norm}"
-    fat_str = f"{summary.total_fat:.0f}"
-    if summary.fat_norm:
-        fat_str += f" / {summary.fat_norm}"
-    carb_str = f"{summary.total_carbs:.0f}"
-    if summary.carb_norm:
-        carb_str += f" / {summary.carb_norm}"
+    # Macros with progress bars
+    def _macro_line(emoji: str, label: str, current: float, norm: float | None, unit: str = "г") -> list[str]:
+        rows = [f"{emoji} {label}: {current:.0f}{f' / {norm}' if norm else ''} {unit}"]
+        bar = _progress_bar(current, norm)
+        if bar:
+            rows.append(bar)
+        return rows
 
-    lines.append(f"🥩 Белки: {pro_str} г")
-    lines.append(f"🧈 Жиры: {fat_str} г")
-    lines.append(f"🍞 Углеводы: {carb_str} г")
+    lines.extend(_macro_line("🥩", "Белки", summary.total_protein, summary.protein_norm))
+    lines.extend(_macro_line("🧈", "Жиры", summary.total_fat, summary.fat_norm))
+    lines.extend(_macro_line("🍞", "Углеводы", summary.total_carbs, summary.carb_norm))
 
     # Meal list
     type_labels = {
