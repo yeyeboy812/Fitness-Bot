@@ -5,6 +5,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from bot.handlers.admin import is_admin
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
 from bot.states.onboarding import OnboardingSG
@@ -28,23 +29,33 @@ async def cmd_start(message: Message, user: User, state: FSMContext) -> None:
 
     await message.answer(
         f"С возвращением, <b>{user.first_name}</b>!\n"
-        "Выбери действие:",
+        "Нажми «🎯 Меню», чтобы открыть разделы бота.",
         reply_markup=MAIN_MENU,
     )
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(
-        "<b>Доступные команды:</b>\n\n"
-        "/start — Перезапуск\n"
-        "/add — Добавить приём пищи\n"
-        "/today — Итоги дня\n"
-        "/workout — Начать тренировку\n"
-        "/cancel — Отменить текущее действие\n"
-        "/help — Эта справка\n\n"
-        "Или используй кнопки меню.",
-    )
+    user_id = message.from_user.id if message.from_user else None
+    lines = [
+        "<b>Как пользоваться ботом</b>",
+        "",
+        "Основное:",
+        "/start — открыть бота заново",
+        "/help — подсказка по разделам",
+        "/cancel — отменить текущее действие",
+        "",
+        "Быстрые действия:",
+        "/add — добавить приём пищи",
+        "/today — посмотреть итоги дня",
+        "/workout — начать тренировку",
+        "",
+        "Для всего остального нажми «🎯 Меню».",
+    ]
+    if is_admin(user_id):
+        lines.extend(["", "<b>Админ</b>", "/admin — админ-панель"])
+
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("cancel"))
@@ -61,4 +72,6 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
 async def cb_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.message.edit_text("Действие отменено.")
+    # Return to idle — restore the reply "Меню" button for navigation.
+    await callback.message.answer("Готов к следующему действию.", reply_markup=MAIN_MENU)
     await callback.answer()

@@ -2,22 +2,23 @@
 
 Responsibilities
 ----------------
-1. Detect any main-menu button press via :class:`MainMenuFilter`.
-2. If the user is mid-scenario (FSM state in ``INTERRUPTIBLE_STATE_NAMES``)
-   ask for exit confirmation using an inline dialog.
-3. Otherwise clear the current state and dispatch to the per-section entry
-   function (``open_add_food``, ``show_today``, …).
-4. Handle ``menu_exit:*`` callback queries from the confirm dialog.
+1. Handle the single reply "🎯 Меню" button: send a fresh message with the
+   inline action picker (:func:`main_menu_kb`). Opening the picker itself
+   never interrupts an active scenario — the user is just looking.
+2. Handle ``menu:<action>`` callback presses from the inline picker:
+   - if the user is mid-scenario (FSM state in
+     ``INTERRUPTIBLE_STATE_NAMES``), ask for exit confirmation;
+   - otherwise clear the state and dispatch to the section opener.
+3. Handle ``menu_exit:*`` callbacks from the confirm dialog.
 
 Why lives here and not per-feature
 ----------------------------------
-Having a single owner for menu-button routing structurally guarantees that
-global navigation is checked *before* any state-bound scenario handler —
-which is exactly the bug we are fixing.
+Having a single owner for menu routing structurally guarantees that global
+navigation is checked *before* any state-bound scenario handler — which is
+the invariant the whole filter setup relies on.
 
-All section opener functions are thin wrappers around existing scenario
-handlers exported from their own feature modules, so there is no duplicated
-logic: this router only knows the menu → action map and the dispatch table.
+Section openers are imported from the feature modules, so this router only
+knows the action → opener mapping.
 """
 
 from __future__ import annotations
@@ -26,66 +27,97 @@ import logging
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import MainMenuFilter
+from bot.handlers.admin import is_admin, render_admin_dashboard
 from bot.handlers.analytics.dashboard import show_dashboard
 from bot.handlers.nutrition.add_meal import open_add_food
 from bot.handlers.nutrition.daily_summary import show_today
 from bot.handlers.products.create import open_create_product
 from bot.handlers.recipes.create import open_create_recipe
+from bot.handlers.subscription import open_subscription
 from bot.handlers.workout.start_workout import open_workout
-from bot.keyboards.inline import confirm_exit_kb
-from bot.keyboards.reply import MAIN_MENU
+from bot.keyboards.inline import confirm_exit_kb, main_menu_kb
 from bot.models.user import User
-from bot.states.app import (
-    MAIN_MENU_BUTTONS,
-    AppState,
-    is_interruptible,
-)
+from bot.states.app import INLINE_MENU_ACTIONS, is_interruptible
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="main_menu")
 
 
+_VALID_ACTIONS = frozenset(INLINE_MENU_ACTIONS.values())
+
+
 # ---------------------------------------------------------------------------
-# Menu button press — top-priority handler
+# Reply "🎯 Меню" press — opens the inline action picker
 # ---------------------------------------------------------------------------
 @router.message(MainMenuFilter())
-async def on_main_menu_button(
-    message: Message,
+async def on_main_menu_button(message: Message, user: User) -> None:
+    """Open the inline action picker as a fresh message.
+
+    Two messages are sent: the first removes the persistent reply keyboard
+    (Telegram disallows combining inline + reply markup on one message), the
+    second carries the inline picker itself. The reply "🎯 Меню" button is
+    only useful in idle state — once the user has the inline picker in front
+    of them, the reply button is redundant noise.
+
+    We intentionally do NOT check the interruptible state here: tapping
+    "Меню" is a passive navigation action (the user is just browsing).
+    The interruption prompt fires only when a concrete action is picked.
+    """
+    logger.info("menu_open user=%s", user.id)
+    header_lines = ["<b>Главное меню</b>", "", "Выбери раздел:"]
+    sections = [
+        "🍽 Питание и дневник",
+        "🏋️ Тренировки и прогресс",
+        "🥗 Свои продукты и рецепты",
+    ]
+    if is_admin(user.id):
+        sections.append("🔐 Админ-инструменты")
+
+    await message.answer("\n".join(header_lines), reply_markup=ReplyKeyboardRemove())
+    await message.answer("\n".join(sections), reply_markup=main_menu_kb(user.id))
+
+
+# ---------------------------------------------------------------------------
+# Inline action pick — dispatch or ask for confirmation
+# ---------------------------------------------------------------------------
+@router.callback_query(F.data.startswith("menu:"))
+async def on_menu_action(
+    callback: CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
     user: User,
 ) -> None:
-    """Handle any main menu button press.
+    action = callback.data.split(":", 1)[1]
+    if action not in _VALID_ACTIONS:
+        logger.warning("unknown menu action: %s", action)
+        await callback.answer("Неизвестное действие", show_alert=True)
+        return
 
-    Runs before all scenario routers because this router is included first
-    in the dispatcher.
-    """
-    action = MAIN_MENU_BUTTONS[message.text]  # type: ignore[index]
     current_state = await state.get_state()
-
     logger.info(
-        "menu_press user=%s action=%s current_state=%s",
+        "menu_pick user=%s action=%s current_state=%s",
         user.id, action, current_state,
     )
 
     # Active scenario with unsaved progress → ask for confirmation.
     if is_interruptible(current_state):
         await state.update_data(pending_menu_action=action)
-        await message.answer(
+        await callback.message.answer(
             "У тебя есть незавершённое действие.\n"
             "Выйти и перейти в другой раздел?",
             reply_markup=confirm_exit_kb(action),
         )
+        await callback.answer()
         return
 
-    # No active scenario (or only a passive view) → clear and dispatch.
     await state.clear()
-    await _dispatch(action, message, state, session, user)
+    await _dispatch(action, callback.message, state, session, user)
+    await callback.answer()
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +162,7 @@ async def on_menu_exit_cancel(
 
 
 # ---------------------------------------------------------------------------
-# Dispatcher — maps menu action key to the section opener
+# Dispatcher — maps action key to its section opener
 # ---------------------------------------------------------------------------
 async def _dispatch(
     action: str,
@@ -151,18 +183,12 @@ async def _dispatch(
         await open_create_product(message, state)
     elif action == "recipes":
         await open_create_recipe(message, state)
-    elif action == "settings":
-        await _open_settings(message, state)
+    elif action == "pro":
+        await open_subscription(message, user)
+    elif action == "admin":
+        if not is_admin(user.id):
+            await message.answer("Этот раздел доступен только администратору.")
+            return
+        await render_admin_dashboard(message, session)
     else:
         logger.warning("unknown menu action: %s", action)
-
-
-async def _open_settings(message: Message, state: FSMContext) -> None:
-    await state.set_state(AppState.settings)
-    try:
-        await message.answer(
-            "Раздел настроек пока в разработке.",
-            reply_markup=MAIN_MENU,
-        )
-    finally:
-        await state.clear()

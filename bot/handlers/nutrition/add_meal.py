@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.filters.menu import NotMainMenuFilter
 from bot.keyboards.inline import add_meal_method_kb, meal_type_kb
 from bot.keyboards.nutrition import amount_prompt_kb, product_list_kb, search_prompt_kb
+from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
 from bot.repositories.meal import MealRepository
 from bot.repositories.product import ProductRepository
@@ -252,6 +253,8 @@ async def on_meal_type(
         f"<b>{data.get('selected_product_name', '')}</b> — {data['amount_grams']:.0f}г\n"
         f"{format_nutrition_line(data['cal'], data['pro'], data['fat'], data['carb'])}"
     )
+    # Flow done — return to idle and restore the reply "Меню" button.
+    await callback.message.answer("Что дальше?", reply_markup=MAIN_MENU)
     await callback.answer("Сохранено!")
 
 
