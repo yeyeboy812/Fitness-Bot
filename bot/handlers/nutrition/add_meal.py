@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import NotMainMenuFilter
 from bot.keyboards.inline import add_meal_method_kb, meal_type_kb
-from bot.keyboards.nutrition import product_list_kb
+from bot.keyboards.nutrition import amount_prompt_kb, product_list_kb, search_prompt_kb
 from bot.models.user import User
 from bot.repositories.meal import MealRepository
 from bot.repositories.product import ProductRepository
@@ -50,7 +50,10 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.adding_food, F.data == "meal_method:search")
 async def on_choose_search(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text("Введи название продукта для поиска:")
+    await callback.message.edit_text(
+        "Введи название продукта для поиска:",
+        reply_markup=search_prompt_kb(),
+    )
     await state.set_state(AppState.food_search)
     await callback.answer()
 
@@ -76,6 +79,7 @@ async def on_search_query(
         )
         return
 
+    await state.update_data(last_search_query=query)
     await message.answer(
         f"Результаты по запросу «{query}»:",
         reply_markup=product_list_kb(products),
@@ -108,7 +112,8 @@ async def on_select_product(
     await callback.message.edit_text(
         f"<b>{product.name}</b>\n"
         f"{format_nutrition_line(product.calories_per_100g, product.protein_per_100g, product.fat_per_100g, product.carbs_per_100g)}\n\n"
-        "Сколько грамм? (например: 250)"
+        "Сколько грамм? (например: 250)",
+        reply_markup=amount_prompt_kb(),
     )
     await state.set_state(AppState.food_amount)
     await callback.answer()
@@ -248,3 +253,70 @@ async def on_meal_type(
         f"{format_nutrition_line(data['cal'], data['pro'], data['fat'], data['carb'])}"
     )
     await callback.answer("Сохранено!")
+
+
+# ---------------------------------------------------------------------------
+# --- Back navigation (per-state) ---
+# ---------------------------------------------------------------------------
+@router.callback_query(AppState.food_search, F.data == "back:adding_food")
+async def back_to_adding_food(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.message.edit_text(
+        "Как добавить еду?",
+        reply_markup=add_meal_method_kb(),
+    )
+    await state.set_state(AppState.adding_food)
+    await callback.answer()
+
+
+@router.callback_query(AppState.food_search_results, F.data == "back:food_search")
+async def back_to_food_search(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.message.edit_text(
+        "Введи название продукта для поиска:",
+        reply_markup=search_prompt_kb(),
+    )
+    await state.set_state(AppState.food_search)
+    await callback.answer()
+
+
+@router.callback_query(AppState.food_amount, F.data == "back:food_search_results")
+async def back_to_food_search_results(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    data = await state.get_data()
+    query = data.get("last_search_query", "")
+
+    if query:
+        service = ProductService(ProductRepository(session))
+        products = await service.search(query, user.id)
+        if products:
+            await callback.message.edit_text(
+                f"Результаты по запросу «{query}»:",
+                reply_markup=product_list_kb(products),
+            )
+            await state.set_state(AppState.food_search_results)
+            await callback.answer()
+            return
+
+    # Query missing or results empty — fall back one more step.
+    await callback.message.edit_text(
+        "Введи название продукта для поиска:",
+        reply_markup=search_prompt_kb(),
+    )
+    await state.set_state(AppState.food_search)
+    await callback.answer()
+
+
+@router.callback_query(AppState.food_meal_type, F.data == "back:food_amount")
+async def back_to_food_amount(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await callback.message.edit_text(
+        f"<b>{data['selected_product_name']}</b>\n"
+        f"{format_nutrition_line(data['cal_100'], data['pro_100'], data['fat_100'], data['carb_100'])}\n\n"
+        "Сколько грамм? (например: 250)",
+        reply_markup=amount_prompt_kb(),
+    )
+    await state.set_state(AppState.food_amount)
+    await callback.answer()

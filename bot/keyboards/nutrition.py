@@ -2,7 +2,28 @@
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from bot.keyboards.inline import back_button
 from bot.models.product import Product
+
+
+def search_prompt_kb() -> InlineKeyboardMarkup:
+    """Keyboard shown with the 'enter product name' prompt."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [back_button("adding_food")],
+            [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+        ]
+    )
+
+
+def amount_prompt_kb() -> InlineKeyboardMarkup:
+    """Keyboard shown with the 'how many grams' prompt."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [back_button("food_search_results")],
+            [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+        ]
+    )
 
 
 def product_list_kb(products: list[Product]) -> InlineKeyboardMarkup:
@@ -16,6 +37,7 @@ def product_list_kb(products: list[Product]) -> InlineKeyboardMarkup:
         ]
         for p in products
     ]
+    buttons.append([back_button("food_search")])
     buttons.append([InlineKeyboardButton(text="Отмена", callback_data="cancel")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

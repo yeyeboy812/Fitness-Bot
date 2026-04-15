@@ -2,6 +2,47 @@
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from bot.handlers.admin import is_admin
+from bot.states.app import INLINE_MENU_ACTIONS
+
+
+def main_menu_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
+    """Inline picker shown after the user taps the reply "Меню" button.
+
+    Layout:
+    - nutrition and progress actions in pairs;
+    - product tools as a separate utility row;
+    - Pro CTA on its own;
+    - admin row only for allowed accounts.
+    """
+    rows = [
+        [
+            InlineKeyboardButton(text="🍽 Добавить еду", callback_data="menu:add_food"),
+            InlineKeyboardButton(text="📅 Мой день", callback_data="menu:my_day"),
+        ],
+        [
+            InlineKeyboardButton(text="🏋️ Тренировка", callback_data="menu:workout"),
+            InlineKeyboardButton(text="📈 Статистика", callback_data="menu:stats"),
+        ],
+        [
+            InlineKeyboardButton(text="🥗 Продукты", callback_data="menu:products"),
+            InlineKeyboardButton(text="🧾 Рецепты", callback_data="menu:recipes"),
+        ]
+    ]
+    rows.append([InlineKeyboardButton(text="⭐ Pro", callback_data="menu:pro")])
+    if is_admin(user_id):
+        admin_label = next(
+            label for label, action in INLINE_MENU_ACTIONS.items() if action == "admin"
+        )
+        rows.append([InlineKeyboardButton(text=admin_label, callback_data="menu:admin")])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def back_button(target: str) -> InlineKeyboardButton:
+    """Shared back button. ``target`` is read by the state-specific back handler."""
+    return InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back:{target}")
+
 
 def cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -67,5 +108,6 @@ def meal_type_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Ужин", callback_data="meal_type:dinner"),
                 InlineKeyboardButton(text="Перекус", callback_data="meal_type:snack"),
             ],
+            [back_button("food_amount")],
         ]
     )
