@@ -54,6 +54,23 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[back_to_menu_button()]])
 
 
+def my_day_kb() -> InlineKeyboardMarkup:
+    """Quick actions on the «Мой день» screen.
+
+    Reuses existing ``menu:add_food`` and ``menu:workout`` callbacks handled
+    by the main-menu dispatcher, so no new routing is required.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Еда", callback_data="menu:add_food"),
+                InlineKeyboardButton(text="🏋️ Тренировка", callback_data="menu:workout"),
+            ],
+            [back_to_menu_button()],
+        ]
+    )
+
+
 def cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

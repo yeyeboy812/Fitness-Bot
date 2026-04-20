@@ -17,6 +17,7 @@ from .nutrition import router as nutrition_router
 from .onboarding import router as onboarding_router
 from .products import router as products_router
 from .recipes import router as recipes_router
+from .subscription import router as subscription_router
 from .workout import router as workout_router
 
 
@@ -25,13 +26,15 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(main_menu_router)
     # 2. Global commands (/start, /help, /cancel).
     dp.include_router(common_router)
-    # 3. Onboarding FSM (blocking flow until user.onboarding_completed).
+    # 3. Payments — pre_checkout/successful_payment must be handled globally.
+    dp.include_router(subscription_router)
+    # 4. Onboarding FSM (blocking flow until user.onboarding_completed).
     dp.include_router(onboarding_router)
-    # 4. Feature scenarios.
+    # 5. Feature scenarios.
     dp.include_router(nutrition_router)
     dp.include_router(workout_router)
     dp.include_router(recipes_router)
     dp.include_router(products_router)
     dp.include_router(analytics_router)
-    # 5. Admin.
+    # 6. Admin.
     dp.include_router(admin_router)

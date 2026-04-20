@@ -28,6 +28,7 @@ class Workout(TimestampMixin, Base):
     workout_date: Mapped[date_type] = mapped_column(Date, nullable=False, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    estimated_calories_burned: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # --- relationships ---

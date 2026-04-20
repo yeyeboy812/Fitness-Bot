@@ -1,8 +1,10 @@
 """User repository."""
 
+from datetime import datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models.user import User
+from bot.models.user import SubscriptionTier, User
 
 from .base import BaseRepository
 
@@ -34,5 +36,16 @@ class UserRepository(BaseRepository[User]):
             raise ValueError(f"User {user_id} not found")
         for key, value in kwargs.items():
             setattr(user, key, value)
+        await self.session.flush()
+        return user
+
+    async def set_subscription(
+        self, user_id: int, expires_at: datetime
+    ) -> User:
+        user = await self.get_by_id(user_id)
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+        user.subscription_tier = SubscriptionTier.pro
+        user.subscription_expires_at = expires_at
         await self.session.flush()
         return user

@@ -51,3 +51,11 @@ class DailySummary(BaseModel):
     protein_norm: int | None = None
     fat_norm: int | None = None
     carb_norm: int | None = None
+    # Activity (today)
+    burned_calories: float = 0.0
+    net_calories: float = 0.0
+    workouts_count: int = 0
+    exercises_count: int = 0
+    sets_count: int = 0
+    total_volume_kg: float = 0.0
+    training_minutes: int = 0

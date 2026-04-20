@@ -61,6 +61,44 @@ class WorkoutRepository(BaseRepository[Workout]):
         await self.session.flush()
         return ws
 
+    async def get_daily_activity(
+        self, user_id: int, day: date
+    ) -> dict[str, float | int]:
+        """Aggregate today's workout stats for the daily summary screen.
+
+        Relies on ``get_by_date`` which already eagerly loads exercises + sets.
+        Returns zeros when no workouts exist for the day.
+        """
+        workouts = await self.get_by_date(user_id, day)
+
+        burned = 0.0
+        workouts_count = len(workouts)
+        exercises_count = 0
+        sets_count = 0
+        volume = 0.0
+        minutes = 0
+
+        for w in workouts:
+            burned += w.estimated_calories_burned or 0.0
+            if w.started_at and w.finished_at:
+                delta = (w.finished_at - w.started_at).total_seconds() / 60.0
+                if delta > 0:
+                    minutes += int(round(delta))
+            exercises_count += len(w.exercises)
+            for we in w.exercises:
+                for s in we.sets:
+                    sets_count += 1
+                    volume += (s.weight_kg or 0.0) * (s.reps or 0)
+
+        return {
+            "burned_calories": round(burned, 1),
+            "workouts_count": workouts_count,
+            "exercises_count": exercises_count,
+            "sets_count": sets_count,
+            "total_volume_kg": round(volume, 1),
+            "training_minutes": minutes,
+        }
+
     async def count_user_workouts(self, user_id: int) -> int:
         stmt = select(func.count()).select_from(Workout).where(Workout.user_id == user_id)
         return await self.session.scalar(stmt) or 0

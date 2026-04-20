@@ -54,9 +54,9 @@ Strict layered flow: **Handler → Service → Repository → DB**.
 - **`bot/repositories/`** — All SQLAlchemy queries. Inherit from `BaseRepository[ModelT]`. Do not leak `select()` statements into services.
 - **`bot/models/`** — SQLAlchemy 2.x declarative ORM. All models inherit `TimestampMixin` (`created_at`, `updated_at`).
 - **`bot/schemas/`** — Pydantic DTOs for crossing layer boundaries.
-- **`bot/states/`** — aiogram `StatesGroup`s. The main user-facing FSM lives in `AppState` (`bot/states/app.py`); ancillary flows keep their own groups (`OnboardingSG`, `CreateRecipeSG`, `CreateProductSG`, `CreateExerciseSG`, `MealHistorySG`). `bot/states/app.py` also owns `MAIN_MENU_BUTTONS` and `INTERRUPTIBLE_STATE_NAMES`.
-- **`bot/filters/`** — reusable aiogram filters. `MainMenuFilter` powers the top-priority menu router; `NotMainMenuFilter` guards every state-bound text handler so menu button labels are never captured as free-text input.
-- **`bot/keyboards/`** — Reply (`reply.py` — `MAIN_MENU`) + Inline builders. New keyboards go into the domain-specific file.
+- **`bot/states/`** — aiogram `StatesGroup`s. The main user-facing FSM lives in `AppState` (`bot/states/app.py`); ancillary flows keep their own groups (`OnboardingSG`, `CreateRecipeSG`, `CreateProductSG`, `CreateExerciseSG`, `MealHistorySG`). `bot/states/app.py` also owns `MAIN_MENU_LABEL`, `INLINE_MENU_ACTIONS`, and `INTERRUPTIBLE_STATE_NAMES`.
+- **`bot/filters/`** — reusable aiogram filters. `MainMenuFilter` matches the single "🎯 Меню" reply button on the top-priority menu router; `NotMainMenuFilter` guards every state-bound text handler so the menu label is never captured as free-text input. Concrete actions live in the inline picker, not on the reply keyboard.
+- **`bot/keyboards/`** — Reply (`reply.py` — `MAIN_MENU`, a single "Меню" button) + Inline builders (`inline.py` — `main_menu_kb()` renders the action picker, including the "⭐ Pro" row). New keyboards go into the domain-specific file.
 - **`bot/middlewares/`** — `DbSessionMiddleware` (per-update async session + auto commit/rollback), `UserInjectMiddleware` (get-or-create `User` and inject as `user`), `ThrottleMiddleware` (0.5s anti-flood).
 - **`bot/integrations/openai_client.py`** — thin async wrapper, `chat_json` (text) + `vision_json` (image, auto-resizes to 1024px for cost control).
 

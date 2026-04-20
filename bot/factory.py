@@ -5,9 +5,9 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, BotCommandScopeChat
 
-from bot.config import Settings
+from bot.config import Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +87,24 @@ def _register_routers(dp: Dispatcher) -> None:
 
 async def _on_startup(bot: Bot) -> None:
     """Set bot commands on startup."""
-    commands = [
+    public_commands = [
         BotCommand(command="start", description="Начать работу с ботом"),
-        BotCommand(command="help", description="Помощь и список команд"),
-        BotCommand(command="add", description="Добавить приём пищи / тренировку"),
+        BotCommand(command="help", description="Помощь по разделам"),
+        BotCommand(command="add", description="Добавить приём пищи"),
         BotCommand(command="today", description="Статистика за сегодня"),
         BotCommand(command="workout", description="Начать тренировку"),
         BotCommand(command="cancel", description="Отменить текущее действие"),
     ]
+    admin_commands = public_commands + [
+        BotCommand(command="admin", description="Админ-панель"),
+    ]
 
-    await bot.set_my_commands(commands)
+    await bot.set_my_commands(public_commands)
+
+    for admin_id in settings.admin_ids:
+        await bot.set_my_commands(
+            admin_commands,
+            scope=BotCommandScopeChat(chat_id=admin_id),
+        )
+
     logger.info("Bot commands set successfully")

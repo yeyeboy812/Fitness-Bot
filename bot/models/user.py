@@ -1,9 +1,10 @@
 """User model."""
 
 import enum
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Float, SmallInteger, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, SmallInteger, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,6 +74,9 @@ class User(TimestampMixin, Base):
         SAEnum(SubscriptionTier, name="subscription_tier_enum"),
         default=SubscriptionTier.free,
         server_default="free",
+    )
+    subscription_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
     )
     referral_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
     timezone: Mapped[str] = mapped_column(

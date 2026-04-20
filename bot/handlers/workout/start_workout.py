@@ -20,7 +20,7 @@ from bot.keyboards.workout import workout_action_kb, workout_start_kb
 from bot.models.user import User
 from bot.repositories.exercise import ExerciseRepository
 from bot.repositories.workout import WorkoutRepository
-from bot.services.workout import WorkoutService
+from bot.services.workout import WorkoutService, estimate_calories_burned
 from bot.states.app import AppState
 
 router = Router(name="start_workout")
@@ -121,6 +121,19 @@ async def on_add_set(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+def _parse_started_at(raw: object, *, fallback: datetime) -> datetime:
+    """Parse ISO started_at from FSM data. Fallback on missing/bad value."""
+    if not isinstance(raw, str) or not raw:
+        return fallback
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return fallback
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 def _flush_current_exercise(data: dict) -> list[dict]:
     """Append the current exercise+sets to the exercises list and return it."""
     exercises = data.get("exercises", [])
@@ -167,10 +180,15 @@ async def on_finish_workout(
         ExerciseRepository(session),
     )
 
+    finished_at = datetime.now(timezone.utc)
+    started_at = _parse_started_at(data.get("workout_started_at"), fallback=finished_at)
+
     workout = await workout_service.start_workout(
         user_id=user.id,
         workout_date=date.today(),
         name=None,
+        started_at=started_at,
+        finished_at=finished_at,
     )
 
     total_sets = 0
@@ -192,6 +210,14 @@ async def on_finish_workout(
             total_sets += 1
             total_volume += (s.get("weight") or 0) * (s.get("reps") or 0)
 
+    duration_minutes = max(1, round((finished_at - started_at).total_seconds() / 60))
+    workout.estimated_calories_burned = estimate_calories_burned(
+        duration_minutes=duration_minutes,
+        user_weight_kg=user.weight_kg,
+        total_sets=total_sets,
+        total_volume_kg=total_volume,
+    )
+
     await state.clear()
 
     lines = ["Тренировка завершена! Отличная работа!\n"]
@@ -202,6 +228,9 @@ async def on_finish_workout(
     lines.append(
         f"\nИтого: {len(exercises)} упр., {total_sets} подх., "
         f"объём {total_volume:.0f} кг"
+    )
+    lines.append(
+        f"⏱ Время: {duration_minutes} мин · 🔥 ~{workout.estimated_calories_burned:.0f} ккал"
     )
 
     await callback.message.edit_text("\n".join(lines))

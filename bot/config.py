@@ -1,9 +1,27 @@
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import BeforeValidator
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _parse_admin_ids(value: object) -> list[int]:
+    """Parse ADMIN_IDS from env formats like `1,2,3` or JSON-like lists."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, list):
+        return [int(item) for item in value]
+    if isinstance(value, int):
+        return [value]
+
+    raw = str(value).strip().strip("[]")
+    if not raw:
+        return []
+
+    return [int(chunk.strip()) for chunk in raw.split(",") if chunk.strip()]
 
 
 class Settings(BaseSettings):
@@ -15,6 +33,7 @@ class Settings(BaseSettings):
 
     # Telegram
     bot_token: SecretStr
+    admin_ids: Annotated[list[int], BeforeValidator(_parse_admin_ids)] = []
 
     # Database
     db_host: str = ""
@@ -54,6 +73,10 @@ class Settings(BaseSettings):
     # General
     log_level: str = "INFO"
     debug: bool = False
+
+    @property
+    def admin_ids_set(self) -> set[int]:
+        return set(self.admin_ids)
 
 
 settings = Settings()

@@ -9,6 +9,37 @@ from bot.repositories.exercise import ExerciseRepository
 from bot.repositories.workout import WorkoutRepository
 
 
+DEFAULT_USER_WEIGHT_KG = 70.0
+BASE_MET = 3.5
+HIGH_MET = 5.0
+HIGH_SETS_THRESHOLD = 20
+HIGH_VOLUME_KG_THRESHOLD = 8000.0
+
+
+def estimate_calories_burned(
+    *,
+    duration_minutes: int,
+    user_weight_kg: float | None,
+    total_sets: int,
+    total_volume_kg: float,
+) -> float:
+    """MVP MET-based estimate for strength training.
+
+    calories = MET * weight_kg * hours.
+    High-intensity MET kicks in when session volume or set count crosses
+    a threshold. Returns a non-negative float rounded to 1 decimal.
+    """
+    duration_minutes = max(1, int(duration_minutes))
+    weight = user_weight_kg if user_weight_kg and user_weight_kg > 0 else DEFAULT_USER_WEIGHT_KG
+    met = (
+        HIGH_MET
+        if total_sets >= HIGH_SETS_THRESHOLD or total_volume_kg >= HIGH_VOLUME_KG_THRESHOLD
+        else BASE_MET
+    )
+    calories = met * weight * (duration_minutes / 60.0)
+    return round(max(0.0, calories), 1)
+
+
 class WorkoutService:
     def __init__(
         self,
@@ -23,11 +54,13 @@ class WorkoutService:
         user_id: int,
         workout_date: date,
         name: str | None = None,
+        **kwargs,
     ) -> Workout:
         return await self.workout_repo.create_workout(
             user_id=user_id,
             workout_date=workout_date,
             name=name,
+            **kwargs,
         )
 
     async def add_exercise_to_workout(

@@ -13,9 +13,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards.inline import back_to_menu_kb
+from bot.keyboards.inline import my_day_kb
 from bot.models.user import User
 from bot.repositories.meal import MealRepository
+from bot.repositories.workout import WorkoutRepository
 from bot.services.nutrition import NutritionService
 from bot.states.app import AppState
 from bot.utils.formatting import format_daily_summary
@@ -31,7 +32,10 @@ async def show_today(
 ) -> None:
     await state.set_state(AppState.viewing_day)
     try:
-        service = NutritionService(MealRepository(session))
+        service = NutritionService(
+            MealRepository(session),
+            WorkoutRepository(session),
+        )
         today = date.today()
 
         summary = await service.get_daily_summary(
@@ -45,7 +49,7 @@ async def show_today(
         meals = await service.get_daily_meals(user.id, today)
 
         text = format_daily_summary(summary, meals)
-        await message.answer(text, reply_markup=back_to_menu_kb())
+        await message.answer(text, reply_markup=my_day_kb())
     finally:
         await state.clear()
 

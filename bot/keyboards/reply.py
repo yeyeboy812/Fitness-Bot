@@ -1,23 +1,17 @@
-"""Persistent reply keyboards.
+"""Persistent reply keyboard.
 
-The main menu is built from ``MAIN_MENU_BUTTONS`` in ``bot.states.app`` so
-that the button labels, the filter, and the menu dispatcher always stay in
-sync — change the registry in one place and everything follows.
+The main reply keyboard is intentionally minimal — a single "🎯 Меню" button
+that opens an inline action picker. All concrete actions live in
+:data:`bot.states.app.INLINE_MENU_ACTIONS` and are rendered by
+``bot.keyboards.inline.main_menu_kb``.
 """
 
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
-from bot.states.app import MAIN_MENU_BUTTONS
-
-# Layout: 2+2+2+1 rows, matching the previous hand-crafted layout.
-_LABELS = list(MAIN_MENU_BUTTONS.keys())
-_LAYOUT_ROWS = [(0, 2), (2, 4), (4, 6), (6, 7)]
+from bot.states.app import MAIN_MENU_LABEL
 
 MAIN_MENU = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text=_LABELS[i]) for i in range(start, end)]
-        for start, end in _LAYOUT_ROWS
-    ],
+    keyboard=[[KeyboardButton(text=MAIN_MENU_LABEL)]],
     resize_keyboard=True,
-    input_field_placeholder="Выберите действие...",
+    input_field_placeholder="Нажми «Меню» или введи команду…",
 )
