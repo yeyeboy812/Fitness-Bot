@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards.reply import MAIN_MENU
+from bot.keyboards.inline import back_to_menu_kb
 from bot.models.user import User
 from bot.repositories.meal import MealRepository
 from bot.services.nutrition import NutritionService
@@ -45,7 +45,7 @@ async def show_today(
         meals = await service.get_daily_meals(user.id, today)
 
         text = format_daily_summary(summary, meals)
-        await message.answer(text, reply_markup=MAIN_MENU)
+        await message.answer(text, reply_markup=back_to_menu_kb())
     finally:
         await state.clear()
 

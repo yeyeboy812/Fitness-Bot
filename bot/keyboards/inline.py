@@ -44,6 +44,16 @@ def back_button(target: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(text="⬅️ Назад", callback_data=f"back:{target}")
 
 
+def back_to_menu_button() -> InlineKeyboardButton:
+    """Back button that returns to the main inline menu."""
+    return InlineKeyboardButton(text="⬅️ Назад", callback_data="back:main_menu")
+
+
+def back_to_menu_kb() -> InlineKeyboardMarkup:
+    """Standalone keyboard with just a back-to-menu button."""
+    return InlineKeyboardMarkup(inline_keyboard=[[back_to_menu_button()]])
+
+
 def cancel_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -71,7 +81,7 @@ def add_meal_method_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Описать текстом", callback_data="meal_method:text")],
             [InlineKeyboardButton(text="Отправить фото", callback_data="meal_method:photo")],
             [InlineKeyboardButton(text="Из рецепта", callback_data="meal_method:recipe")],
-            [InlineKeyboardButton(text="Отмена", callback_data="cancel")],
+            [back_to_menu_button()],
         ]
     )
 

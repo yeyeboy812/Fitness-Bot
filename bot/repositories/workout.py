@@ -64,3 +64,18 @@ class WorkoutRepository(BaseRepository[Workout]):
     async def count_user_workouts(self, user_id: int) -> int:
         stmt = select(func.count()).select_from(Workout).where(Workout.user_id == user_id)
         return await self.session.scalar(stmt) or 0
+
+    async def get_recent(
+        self, user_id: int, limit: int = 5
+    ) -> list[Workout]:
+        stmt = (
+            select(Workout)
+            .where(Workout.user_id == user_id)
+            .options(
+                selectinload(Workout.exercises).selectinload(WorkoutExercise.sets)
+            )
+            .order_by(Workout.workout_date.desc(), Workout.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

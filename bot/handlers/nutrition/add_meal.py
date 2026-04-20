@@ -7,6 +7,7 @@ gram amounts.
 """
 
 from datetime import date
+from uuid import UUID
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -94,7 +95,11 @@ async def on_select_product(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    product_id = callback.data.split(":")[1]
+    try:
+        product_id = UUID(callback.data.split(":")[1])
+    except ValueError:
+        await callback.answer("Ошибка: неверный ID", show_alert=True)
+        return
     service = ProductService(ProductRepository(session))
     product = await service.get_by_id(product_id)
 
@@ -238,7 +243,7 @@ async def on_meal_type(
     # Increment product usage if from search
     if data.get("selected_product_id"):
         product_repo = ProductRepository(session)
-        await product_repo.increment_usage(data["selected_product_id"])
+        await product_repo.increment_usage(UUID(data["selected_product_id"]))
 
     await state.clear()
 

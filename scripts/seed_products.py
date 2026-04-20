@@ -10,10 +10,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bot.config import settings
 from bot.models.base import create_db_engine, create_session_factory
-from bot.models.product import Product, ProductSource
+from bot.models.product import Product, ProductAlias, ProductSource
 
 
 CSV_PATH = Path(__file__).resolve().parent.parent / "data" / "products_ru.csv"
+ALIASES_CSV_PATH = Path(__file__).resolve().parent.parent / "data" / "product_aliases.csv"
 
 
 async def seed() -> None:
@@ -61,5 +62,55 @@ async def seed() -> None:
     await engine.dispose()
 
 
+async def seed_aliases() -> None:
+    if not ALIASES_CSV_PATH.exists():
+        print("Aliases CSV not found, skipping.")
+        return
+
+    engine = create_db_engine(settings.database_url)
+
+    if "sqlite" in settings.database_url:
+        from bot.models import Base  # noqa: F401
+        from bot.models.base import create_tables
+        await create_tables(engine)
+
+    session_factory = create_session_factory(engine)
+
+    async with session_factory() as session:
+        from sqlalchemy import select, func
+        count = await session.scalar(
+            select(func.count()).select_from(ProductAlias)
+        )
+        if count and count > 0:
+            print(f"Product aliases already seeded ({count} found). Skipping.")
+            await engine.dispose()
+            return
+
+        with open(ALIASES_CSV_PATH, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            aliases = []
+            skipped = 0
+            for row in reader:
+                product = await session.scalar(
+                    select(Product).where(
+                        Product.name == row["product_name"],
+                        Product.source == ProductSource.system,
+                    )
+                )
+                if not product:
+                    skipped += 1
+                    continue
+                aliases.append(
+                    ProductAlias(product_id=product.id, alias=row["alias"])
+                )
+
+            session.add_all(aliases)
+            await session.commit()
+            print(f"Seeded {len(aliases)} product aliases (skipped {skipped}).")
+
+    await engine.dispose()
+
+
 if __name__ == "__main__":
     asyncio.run(seed())
+    asyncio.run(seed_aliases())

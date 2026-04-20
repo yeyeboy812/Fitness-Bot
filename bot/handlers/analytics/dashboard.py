@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.keyboards.reply import MAIN_MENU
+from bot.keyboards.inline import back_to_menu_kb
 from bot.models.user import User
 from bot.repositories.meal import MealRepository
 from bot.repositories.workout import WorkoutRepository
@@ -50,6 +50,16 @@ async def show_dashboard(
 
         lines.append(f"\nВсего тренировок: <b>{workout_count}</b>")
 
-        await message.answer("\n".join(lines), reply_markup=MAIN_MENU)
+        workout_repo = WorkoutRepository(session)
+        recent = await workout_repo.get_recent(user.id, limit=5)
+        if recent:
+            lines.append("\n<b>Последние тренировки:</b>")
+            for w in recent:
+                day_str = w.workout_date.strftime("%d.%m")
+                total_ex = len(w.exercises)
+                total_sets = sum(len(we.sets) for we in w.exercises)
+                lines.append(f"  {day_str} — {total_ex} упр., {total_sets} подх.")
+
+        await message.answer("\n".join(lines), reply_markup=back_to_menu_kb())
     finally:
         await state.clear()

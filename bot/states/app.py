@@ -2,7 +2,7 @@
 
 This module is the single source of truth for:
   - every user-facing FSM state the bot can be in;
-  - the list of main-menu buttons and their action keys;
+  - the single reply-menu label and the inline action registry;
   - which states represent an interruptible in-progress scenario.
 
 `idle` is represented implicitly as ``state is None`` — no explicit member is
@@ -45,20 +45,26 @@ class AppState(StatesGroup):
     viewing_stats = State()
     viewing_products = State()
     viewing_recipes = State()
-    settings = State()
 
 
-# --- Main menu button registry --------------------------------------------
-# Button label (exactly as shown to the user) → internal action key.
-# Used by: the reply keyboard builder, MainMenuFilter, and the menu dispatcher.
-MAIN_MENU_BUTTONS: dict[str, str] = {
-    "Добавить еду": "add_food",
-    "Мой день": "my_day",
-    "Тренировка": "workout",
-    "Статистика": "stats",
-    "Продукты": "products",
-    "Рецепты": "recipes",
-    "Настройки": "settings",
+# --- Main reply-menu label ------------------------------------------------
+# The only button on the persistent reply keyboard. Tapping it opens the
+# inline action picker built from INLINE_MENU_ACTIONS.
+MAIN_MENU_LABEL = "🎯 Меню"
+
+
+# --- Inline menu registry -------------------------------------------------
+# Button label (as shown inside the inline picker) → internal action key.
+# Used by the inline keyboard builder and the menu dispatcher.
+INLINE_MENU_ACTIONS: dict[str, str] = {
+    "🍽 Добавить еду": "add_food",
+    "📅 Мой день": "my_day",
+    "🏋️ Тренировка": "workout",
+    "📈 Статистика": "stats",
+    "🥗 Продукты": "products",
+    "🧾 Рецепты": "recipes",
+    "⭐ Pro": "pro",
+    "🔐 Админка": "admin",
 }
 
 
@@ -83,11 +89,7 @@ _INTERRUPTIBLE_APP_STATES: frozenset[State] = frozenset({
 
 _INTERRUPTIBLE_AUX_STATES: frozenset[State] = frozenset({
     CreateProductSG.enter_name,
-    CreateProductSG.enter_calories,
-    CreateProductSG.enter_protein,
-    CreateProductSG.enter_fat,
-    CreateProductSG.enter_carbs,
-    CreateProductSG.confirm,
+    CreateProductSG.enter_nutrition,
     CreateRecipeSG.enter_name,
     CreateRecipeSG.search_ingredient,
     CreateRecipeSG.select_ingredient,

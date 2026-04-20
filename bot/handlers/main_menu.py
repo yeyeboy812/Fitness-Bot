@@ -28,7 +28,7 @@ from datetime import date
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import MainMenuFilter
@@ -64,13 +64,7 @@ async def on_main_menu_button(
     user: User,
     session: AsyncSession,
 ) -> None:
-    """Open the inline action picker as a fresh message.
-
-    Two messages are sent: the first removes the persistent reply keyboard
-    (Telegram disallows combining inline + reply markup on one message), the
-    second carries the inline picker itself. The reply "🎯 Меню" button is
-    only useful in idle state — once the user has the inline picker in front
-    of them, the reply button is redundant noise.
+    """Open the inline action picker as a single message.
 
     We intentionally do NOT check the interruptible state here: tapping
     "Меню" is a passive navigation action (the user is just browsing).
@@ -97,8 +91,8 @@ async def on_main_menu_button(
     if is_admin(user.id):
         sections.append("🔐 Админ-инструменты")
 
-    await message.answer(greeting, reply_markup=ReplyKeyboardRemove())
-    await message.answer("\n".join(sections), reply_markup=main_menu_kb(user.id))
+    text = f"{greeting}\n\n" + "\n".join(sections)
+    await message.answer(text, reply_markup=main_menu_kb(user.id))
 
 
 def _progress_greeting(summary: DailySummary) -> str:
@@ -208,6 +202,55 @@ async def on_menu_exit_cancel(
     except Exception:  # noqa: BLE001
         pass
     await callback.answer("Продолжаем текущее действие")
+
+
+# ---------------------------------------------------------------------------
+# Global "back to menu" — returns user to the inline action picker
+# ---------------------------------------------------------------------------
+@router.callback_query(F.data == "back:main_menu")
+async def on_back_to_menu(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    await state.clear()
+    service = NutritionService(MealRepository(session))
+    summary = await service.get_daily_summary(
+        user.id,
+        date.today(),
+        calorie_norm=user.calorie_norm,
+        protein_norm=user.protein_norm,
+        fat_norm=user.fat_norm,
+        carb_norm=user.carb_norm,
+    )
+    greeting = _progress_greeting(summary)
+
+    sections = [
+        "🍽 Питание и дневник",
+        "🏋️ Тренировки и прогресс",
+        "🥗 Свои продукты и рецепты",
+    ]
+    if is_admin(user.id):
+        sections.append("🔐 Админ-инструменты")
+
+    text = f"{greeting}\n\n" + "\n".join(sections)
+    try:
+        await callback.message.edit_text(text, reply_markup=main_menu_kb(user.id))
+    except Exception:  # noqa: BLE001
+        await callback.message.answer(text, reply_markup=main_menu_kb(user.id))
+    await callback.answer()
+
+
+@router.callback_query(F.data == "open_menu")
+async def on_open_menu(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    """Handle the 'Открыть меню' button from /start."""
+    await on_back_to_menu(callback, state, session, user)
 
 
 # ---------------------------------------------------------------------------

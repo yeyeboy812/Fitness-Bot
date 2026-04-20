@@ -11,6 +11,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import NotMainMenuFilter
+from bot.keyboards.inline import back_to_menu_kb
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
 from bot.repositories.product import ProductRepository
@@ -23,7 +24,10 @@ router = Router(name="create_product")
 
 
 async def open_create_product(message: Message, state: FSMContext) -> None:
-    await message.answer("Введи название нового продукта:")
+    await message.answer(
+        "Введи название нового продукта:",
+        reply_markup=back_to_menu_kb(),
+    )
     await state.set_state(CreateProductSG.enter_name)
 
 
@@ -34,75 +38,59 @@ async def on_product_name(message: Message, state: FSMContext) -> None:
         await message.answer("Введи название продукта (до 256 символов):")
         return
     await state.update_data(name=name)
-    await message.answer(f"Продукт: <b>{name}</b>\n\nСколько ккал на 100г?")
-    await state.set_state(CreateProductSG.enter_calories)
+    await message.answer(
+        f"Продукт: <b>{name}</b>\n\n"
+        "Введи КБЖУ на 100г в одну строку через пробел:\n"
+        "<code>ккал белки жиры углеводы</code>\n\n"
+        "Например: <code>157 14 11 0</code>",
+    )
+    await state.set_state(CreateProductSG.enter_nutrition)
 
 
-@router.message(CreateProductSG.enter_calories, NotMainMenuFilter())
-async def on_calories(message: Message, state: FSMContext) -> None:
-    try:
-        cal = float((message.text or "").strip().replace(",", "."))
-        if cal < 0 or cal > 1000:
-            raise ValueError
-    except ValueError:
-        await message.answer("Введи калорийность на 100г (0–1000):")
-        return
-    await state.update_data(calories=cal)
-    await message.answer("Белки на 100г? (г)")
-    await state.set_state(CreateProductSG.enter_protein)
-
-
-@router.message(CreateProductSG.enter_protein, NotMainMenuFilter())
-async def on_protein(message: Message, state: FSMContext) -> None:
-    try:
-        val = float((message.text or "").strip().replace(",", "."))
-        if val < 0 or val > 100:
-            raise ValueError
-    except ValueError:
-        await message.answer("Введи белки на 100г (0–100):")
-        return
-    await state.update_data(protein=val)
-    await message.answer("Жиры на 100г? (г)")
-    await state.set_state(CreateProductSG.enter_fat)
-
-
-@router.message(CreateProductSG.enter_fat, NotMainMenuFilter())
-async def on_fat(message: Message, state: FSMContext) -> None:
-    try:
-        val = float((message.text or "").strip().replace(",", "."))
-        if val < 0 or val > 100:
-            raise ValueError
-    except ValueError:
-        await message.answer("Введи жиры на 100г (0–100):")
-        return
-    await state.update_data(fat=val)
-    await message.answer("Углеводы на 100г? (г)")
-    await state.set_state(CreateProductSG.enter_carbs)
-
-
-@router.message(CreateProductSG.enter_carbs, NotMainMenuFilter())
-async def on_carbs(
+@router.message(CreateProductSG.enter_nutrition, NotMainMenuFilter())
+async def on_nutrition(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
     user: User,
 ) -> None:
-    try:
-        val = float((message.text or "").strip().replace(",", "."))
-        if val < 0 or val > 100:
-            raise ValueError
-    except ValueError:
-        await message.answer("Введи углеводы на 100г (0–100):")
+    text = (message.text or "").strip()
+    parts = text.replace(",", ".").split()
+
+    if len(parts) != 4:
+        await message.answer(
+            "Нужно 4 числа через пробел: ккал белки жиры углеводы\n"
+            "Например: <code>157 14 11 0</code>",
+        )
         return
 
-    data = await state.get_data()
+    try:
+        cal = float(parts[0])
+        protein = float(parts[1])
+        fat = float(parts[2])
+        carbs = float(parts[3])
+    except ValueError:
+        await message.answer(
+            "Не удалось разобрать числа. Формат:\n"
+            "<code>ккал белки жиры углеводы</code>",
+        )
+        return
 
+    if not (0 <= cal <= 1000):
+        await message.answer("Калорийность должна быть от 0 до 1000.")
+        return
+    for val, label in [(protein, "Белки"), (fat, "Жиры"), (carbs, "Углеводы")]:
+        if not (0 <= val <= 100):
+            await message.answer(f"{label} должны быть от 0 до 100г.")
+            return
+
+    data = await state.get_data()
     product_data = ProductCreate(
         name=data["name"],
-        calories_per_100g=data["calories"],
-        protein_per_100g=data["protein"],
-        fat_per_100g=data["fat"],
-        carbs_per_100g=val,
+        calories_per_100g=cal,
+        protein_per_100g=protein,
+        fat_per_100g=fat,
+        carbs_per_100g=carbs,
     )
 
     service = ProductService(ProductRepository(session))

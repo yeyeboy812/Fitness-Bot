@@ -5,13 +5,15 @@ for the "Рецепты" button. Free-text handlers apply ``NotMainMenuFilter``
 so menu button labels are never captured as recipe names / amounts.
 """
 
+from uuid import UUID
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import NotMainMenuFilter
-from bot.keyboards.inline import cancel_kb
+from bot.keyboards.inline import back_to_menu_kb
 from bot.keyboards.nutrition import product_list_kb
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
@@ -29,7 +31,7 @@ router = Router(name="create_recipe")
 async def open_create_recipe(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Введи название нового рецепта:",
-        reply_markup=cancel_kb(),
+        reply_markup=back_to_menu_kb(),
     )
     await state.set_state(CreateRecipeSG.enter_name)
 
@@ -80,7 +82,11 @@ async def on_select_ingredient(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    product_id = callback.data.split(":")[1]
+    try:
+        product_id = UUID(callback.data.split(":")[1])
+    except ValueError:
+        await callback.answer("Ошибка: неверный ID", show_alert=True)
+        return
     service = ProductService(ProductRepository(session))
     product = await service.get_by_id(product_id)
 

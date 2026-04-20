@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models.product import Product
+from bot.models.product import Product, ProductAlias
 
 from .base import BaseRepository
 
@@ -20,14 +20,16 @@ class ProductRepository(BaseRepository[Product]):
         user_id: int | None = None,
         limit: int = 10,
     ) -> list[Product]:
-        """Search products by name (ILIKE). Returns system + user's own products."""
+        """Search products by name or alias (ILIKE). Returns system + user's own."""
         pattern = f"%{query}%"
         stmt = (
             select(Product)
+            .outerjoin(ProductAlias, Product.id == ProductAlias.product_id)
             .where(
-                Product.name.ilike(pattern),
+                or_(Product.name.ilike(pattern), ProductAlias.alias.ilike(pattern)),
                 or_(Product.user_id.is_(None), Product.user_id == user_id),
             )
+            .group_by(Product.id)
             .order_by(Product.usage_count.desc(), Product.name)
             .limit(limit)
         )

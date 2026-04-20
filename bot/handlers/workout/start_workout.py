@@ -6,14 +6,21 @@ text handlers apply ``NotMainMenuFilter`` so a main-menu button label can
 never be misinterpreted as free text (e.g. an exercise name or a set).
 """
 
+from datetime import date, datetime, timezone
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import NotMainMenuFilter
 from bot.keyboards.reply import MAIN_MENU
-from bot.keyboards.workout import workout_action_kb
+from bot.keyboards.workout import workout_action_kb, workout_start_kb
+from bot.models.user import User
+from bot.repositories.exercise import ExerciseRepository
+from bot.repositories.workout import WorkoutRepository
+from bot.services.workout import WorkoutService
 from bot.states.app import AppState
 
 router = Router(name="start_workout")
@@ -27,6 +34,11 @@ async def open_workout(message: Message, state: FSMContext) -> None:
         "Начинаем тренировку!\n\n"
         "Введи название упражнения\n"
         "(например: «Жим лёжа» или «Приседания»):",
+        reply_markup=workout_start_kb(),
+    )
+    await state.update_data(
+        exercises=[],
+        workout_started_at=datetime.now(timezone.utc).isoformat(),
     )
     await state.set_state(AppState.workout_name_input)
 
@@ -109,16 +121,89 @@ async def on_add_set(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+def _flush_current_exercise(data: dict) -> list[dict]:
+    """Append the current exercise+sets to the exercises list and return it."""
+    exercises = data.get("exercises", [])
+    if data.get("current_exercise") and data.get("sets"):
+        exercises.append({
+            "name": data["current_exercise"],
+            "sets": list(data["sets"]),
+        })
+    return exercises
+
+
 @router.callback_query(AppState.workout_in_progress, F.data == "workout:next_exercise")
 async def on_next_exercise(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text("Введи название следующего упражнения:")
+    data = await state.get_data()
+    exercises = _flush_current_exercise(data)
+    await state.update_data(exercises=exercises, current_exercise=None, sets=[])
+    await callback.message.edit_text(
+        "Введи название следующего упражнения:",
+        reply_markup=workout_start_kb(),
+    )
     await state.set_state(AppState.workout_name_input)
     await callback.answer()
 
 
 @router.callback_query(AppState.workout_in_progress, F.data == "workout:finish")
-async def on_finish_workout(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_finish_workout(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    data = await state.get_data()
+    exercises = _flush_current_exercise(data)
+
+    if not exercises:
+        await state.clear()
+        await callback.message.edit_text("Тренировка пуста — ничего не сохранено.")
+        await callback.message.answer("Выбери действие:", reply_markup=MAIN_MENU)
+        await callback.answer()
+        return
+
+    workout_service = WorkoutService(
+        WorkoutRepository(session),
+        ExerciseRepository(session),
+    )
+
+    workout = await workout_service.start_workout(
+        user_id=user.id,
+        workout_date=date.today(),
+        name=None,
+    )
+
+    total_sets = 0
+    total_volume = 0.0
+    for order, ex in enumerate(exercises, 1):
+        we = await workout_service.add_exercise_to_workout(
+            workout_id=workout.id,
+            user_id=user.id,
+            exercise_name=ex["name"],
+            order=order,
+        )
+        for set_num, s in enumerate(ex["sets"], 1):
+            await workout_service.log_set(
+                workout_exercise_id=we.id,
+                set_number=set_num,
+                weight_kg=s.get("weight"),
+                reps=s.get("reps"),
+            )
+            total_sets += 1
+            total_volume += (s.get("weight") or 0) * (s.get("reps") or 0)
+
     await state.clear()
-    await callback.message.edit_text("Тренировка завершена! Отличная работа!")
+
+    lines = ["Тренировка завершена! Отличная работа!\n"]
+    for ex in exercises:
+        lines.append(f"<b>{ex['name']}</b>")
+        for i, s in enumerate(ex["sets"], 1):
+            lines.append(f"  {i}. {s['weight']}кг × {s['reps']}")
+    lines.append(
+        f"\nИтого: {len(exercises)} упр., {total_sets} подх., "
+        f"объём {total_volume:.0f} кг"
+    )
+
+    await callback.message.edit_text("\n".join(lines))
     await callback.message.answer("Выбери действие:", reply_markup=MAIN_MENU)
-    await callback.answer()
+    await callback.answer("Сохранено!")

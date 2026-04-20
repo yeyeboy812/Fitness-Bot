@@ -10,11 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class CreateProductSG(StatesGroup):
     enter_name = State()
-    enter_calories = State()
-    enter_protein = State()
-    enter_fat = State()
-    enter_carbs = State()
-    confirm = State()
+    enter_nutrition = State()
 
 
 class MealHistorySG(StatesGroup):

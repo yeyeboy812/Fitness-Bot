@@ -3,7 +3,12 @@
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from bot.handlers.admin import is_admin
 from bot.keyboards.reply import MAIN_MENU
@@ -13,9 +18,37 @@ from bot.states.onboarding import OnboardingSG
 router = Router(name="common")
 
 
+def _start_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎯 Открыть меню", callback_data="open_menu")],
+        ]
+    )
+
+
+_WELCOME_TEXT = (
+    "Доброго времени суток, Чемпион!\n\n"
+    "Я — <b>Iron Fitness Bot</b>, твой персональный помощник "
+    "по питанию и тренировкам.\n\n"
+    "<b>Что я умею:</b>\n"
+    "• Считать калории и КБЖУ\n"
+    "• Вести дневник питания\n"
+    "• Логировать тренировки\n"
+    "• Показывать статистику и прогресс\n"
+    "• Хранить свои продукты и рецепты\n\n"
+    "<b>Полезные команды:</b>\n"
+    "/add — добавить приём пищи\n"
+    "/today — итоги дня\n"
+    "/workout — начать тренировку\n"
+    "/help — подсказка по разделам\n"
+    "/cancel — отменить текущее действие\n\n"
+    "Нажми кнопку ниже, чтобы начать 👇"
+)
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, user: User, state: FSMContext) -> None:
-    """Entry point. Redirects to onboarding if not completed, otherwise shows main menu."""
+    """Entry point. Redirects to onboarding if not completed, otherwise shows welcome."""
     await state.clear()
 
     if not user.onboarding_completed:
@@ -27,11 +60,7 @@ async def cmd_start(message: Message, user: User, state: FSMContext) -> None:
         await state.set_state(OnboardingSG.name)
         return
 
-    await message.answer(
-        f"С возвращением, <b>{user.first_name}</b>!\n"
-        "Нажми «🎯 Меню», чтобы открыть разделы бота.",
-        reply_markup=MAIN_MENU,
-    )
+    await message.answer(_WELCOME_TEXT, reply_markup=_start_kb())
 
 
 @router.message(Command("help"))
