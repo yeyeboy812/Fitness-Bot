@@ -14,6 +14,7 @@ from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
 from bot.models.user import User
+from bot.services.user import is_profile_complete
 from bot.states.app import MAIN_MENU_LABEL
 
 
@@ -26,7 +27,7 @@ class MainMenuFilter(BaseFilter):
     """
 
     async def __call__(self, message: Message, user: User | None = None) -> bool:
-        if user is not None and not user.onboarding_completed:
+        if user is not None and not is_profile_complete(user):
             return False
         return message.text == MAIN_MENU_LABEL
 

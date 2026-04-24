@@ -1,6 +1,6 @@
 # Project Context
 
-Last generated: 2026-04-24 22:51
+Last generated: 2026-04-24 23:47
 
 This file is the compact startup memory for coding agents working in this repository.
 Read it before broad exploration, then inspect only the specific files needed for the task.
@@ -64,19 +64,19 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 ## Module Map
 
-- `bot/handlers`: Telegram I/O, callback parsing, message replies, FSM transitions. (19 files)
+- `bot/handlers`: Telegram I/O, callback parsing, message replies, FSM transitions. (21 files)
 - `bot/services`: Business logic, designed to be testable without Telegram. (19 files)
 - `bot/repositories`: SQLAlchemy query layer. (10 files)
 - `bot/models`: SQLAlchemy ORM schema. (10 files)
 - `bot/schemas`: Pydantic DTOs. (7 files)
 - `bot/states`: aiogram FSM states and menu constants. (6 files)
-- `bot/keyboards`: Reply and inline keyboard builders. (7 files)
+- `bot/keyboards`: Reply and inline keyboard builders. (9 files)
 - `bot/middlewares`: DB session, user injection, throttling, state logging. (5 files)
 - `bot/integrations`: External API wrappers. (3 files)
 - `collector_bot`: Second Telegram bot for collecting submissions. (8 files)
-- `tests`: pytest coverage for services, handlers, repositories. (12 files)
-- `alembic`: Database migrations. (8 files)
-- `scripts`: Local maintenance and seed scripts. (5 files)
+- `tests`: pytest coverage for services, handlers, repositories. (15 files)
+- `alembic`: Database migrations. (9 files)
+- `scripts`: Local maintenance and seed scripts. (6 files)
 
 ## File Inventory
 
@@ -109,8 +109,11 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `.serena/memories/architecture_and_domain_rules.md`
 - `.serena/memories/coding_conventions.md`
 - `.serena/memories/context_bot_workspace.md`
+- `.serena/memories/entitlements_and_pro_gating.md`
+- `.serena/memories/profile_personalization_flow.md`
 - `.serena/memories/project_assessment_2026_04_23.md`
 - `.serena/memories/project_overview.md`
+- `.serena/memories/start_onboarding_idempotency.md`
 - `.serena/memories/suggested_commands.md`
 - `.serena/memories/task_completion_checklist.md`
 - `.serena/project.local.yml`
@@ -146,6 +149,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `alembic/versions/20260422_add_submissions.py`
 - `alembic/versions/20260423_agent_bridge.py`
 - `alembic/versions/20260423_workout_expansion.py`
+- `alembic/versions/20260424_food_catalog.py`
 
 ### alembic.ini
 
@@ -175,9 +179,11 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/handlers/products/__init__.py`
 - `bot/handlers/products/create.py`
 - `bot/handlers/products/favorites.py`
+- `bot/handlers/profile.py`
 - `bot/handlers/recipes/__init__.py`
 - `bot/handlers/recipes/create.py`
 - `bot/handlers/recipes/list_recipes.py`
+- `bot/handlers/settings.py`
 - `bot/handlers/subscription.py`
 - `bot/handlers/workout/__init__.py`
 - `bot/handlers/workout/start_workout.py`
@@ -188,7 +194,9 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/keyboards/inline.py`
 - `bot/keyboards/nutrition.py`
 - `bot/keyboards/onboarding.py`
+- `bot/keyboards/profile.py`
 - `bot/keyboards/reply.py`
+- `bot/keyboards/settings.py`
 - `bot/keyboards/stats.py`
 - `bot/keyboards/workout.py`
 - `bot/middlewares/__init__.py`
@@ -209,11 +217,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/repositories/__init__.py`
 - `bot/repositories/agent.py`
 - `bot/repositories/base.py`
-- `bot/repositories/exercise.py`
-- `bot/repositories/meal.py`
-- `bot/repositories/product.py`
-- `bot/repositories/recipe.py`
-- ... 39 more
+- ... 43 more
 
 ### collector_bot
 
@@ -268,6 +272,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 - `scripts/deploy.sh`
 - `scripts/seed_exercises.py`
+- `scripts/seed_food_catalog.py`
 - `scripts/seed_products.py`
 - `scripts/server_bootstrap.sh`
 - `scripts/update_project_context.py`
@@ -275,7 +280,10 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 ### tests
 
 - `tests/test_handlers/__init__.py`
+- `tests/test_handlers/test_add_meal_entitlements.py`
 - `tests/test_handlers/test_main_menu_keyboard.py`
+- `tests/test_handlers/test_profile.py`
+- `tests/test_handlers/test_start_idempotent.py`
 - `tests/test_handlers/test_stats_dashboard.py`
 - `tests/test_repositories/test_agent_bridge.py`
 - `tests/test_repositories/test_exercise_catalog.py`

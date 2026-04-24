@@ -55,6 +55,12 @@ class AppState(StatesGroup):
     viewing_stats = State()
     viewing_products = State()
     viewing_recipes = State()
+    viewing_settings = State()
+    viewing_profile = State()
+
+    # --- Profile / personalization flow -----------------------------------
+    profile_value_input = State()
+    profile_confirm = State()
 
 
 # --- Main reply-menu label ------------------------------------------------
@@ -73,6 +79,7 @@ INLINE_MENU_ACTIONS: dict[str, str] = {
     "📈 Статистика": "stats",
     "🥗 Продукты": "products",
     "🧾 Рецепты": "recipes",
+    "⚙️ Настройки": "settings",
     "⭐ Pro": "pro",
     "🔐 Админка": "admin",
 }
@@ -105,6 +112,8 @@ _INTERRUPTIBLE_APP_STATES: frozenset[State] = frozenset({
     AppState.workout_set_input,
     AppState.workout_in_progress,
     AppState.workout_exercise_summary,
+    AppState.profile_value_input,
+    AppState.profile_confirm,
 })
 
 _INTERRUPTIBLE_AUX_STATES: frozenset[State] = frozenset({

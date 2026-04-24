@@ -40,6 +40,7 @@ from bot.handlers.nutrition.add_meal import open_add_food
 from bot.handlers.nutrition.daily_summary import show_today
 from bot.handlers.products.create import open_create_product
 from bot.handlers.recipes.create import open_create_recipe
+from bot.handlers.settings import open_settings
 from bot.handlers.subscription import open_subscription
 from bot.handlers.workout.start_workout import open_workout
 from bot.keyboards.inline import confirm_exit_kb, main_menu_kb
@@ -317,7 +318,7 @@ async def _dispatch(
     user: User,
 ) -> None:
     if action == "add_food":
-        await open_add_food(message, state)
+        await open_add_food(message, state, user)
     elif action == "my_day":
         await show_today(message, state, session, user)
     elif action == "workout":
@@ -328,6 +329,8 @@ async def _dispatch(
         await open_create_product(message, state)
     elif action == "recipes":
         await open_create_recipe(message, state)
+    elif action == "settings":
+        await open_settings(message, state)
     elif action == "pro":
         await open_subscription(message, user)
     elif action == "admin":

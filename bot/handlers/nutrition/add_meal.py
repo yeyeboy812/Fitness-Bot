@@ -25,6 +25,7 @@ from bot.repositories.meal import MealRepository
 from bot.repositories.product import ProductRepository
 from bot.schemas.nutrition import MealCreate, MealItemCreate, MealItemSource
 from bot.services.agent_events import AgentEventService
+from bot.services.entitlements import EntitlementService, Feature
 from bot.services.nutrition import NutritionService
 from bot.services.product import ProductService
 from bot.states.app import AppState
@@ -33,20 +34,38 @@ from bot.utils.formatting import format_nutrition_line
 router = Router(name="add_meal")
 
 
+def _ai_features_locked(user: User) -> bool:
+    return not EntitlementService().is_pro_active(user)
+
+
+async def _answer_locked(callback: CallbackQuery, feature: Feature, user: User) -> bool:
+    decision = EntitlementService().check(user, feature)
+    if decision.allowed:
+        return False
+    await callback.answer(decision.reason or "Доступно в Pro.", show_alert=True)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Section entry point
 # ---------------------------------------------------------------------------
-async def open_add_food(message: Message, state: FSMContext) -> None:
+async def open_add_food(
+    message: Message,
+    state: FSMContext,
+    user: User | None = None,
+) -> None:
     await message.answer(
         "Как добавить еду?",
-        reply_markup=add_meal_method_kb(),
+        reply_markup=add_meal_method_kb(
+            ai_features_locked=_ai_features_locked(user) if user else False,
+        ),
     )
     await state.set_state(AppState.adding_food)
 
 
 @router.message(Command("add"))
-async def cmd_add(message: Message, state: FSMContext) -> None:
-    await open_add_food(message, state)
+async def cmd_add(message: Message, state: FSMContext, user: User) -> None:
+    await open_add_food(message, state, user)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +181,14 @@ async def on_set_amount(message: Message, state: FSMContext) -> None:
 # --- Free text path ---
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.adding_food, F.data == "meal_method:text")
-async def on_choose_text(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_choose_text(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user: User,
+) -> None:
+    if await _answer_locked(callback, Feature.ai_text_meal, user):
+        return
+
     await callback.message.edit_text(
         "Опиши, что ты съел:\n"
         "(например: «250г курицы и 150г риса»)"
@@ -172,7 +198,7 @@ async def on_choose_text(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(AppState.food_text_description, NotMainMenuFilter())
-async def on_text_input(message: Message, state: FSMContext) -> None:
+async def on_text_input(message: Message, state: FSMContext, user: User) -> None:
     text = (message.text or "").strip()
     if not text:
         await message.answer("Опиши, что ты съел:")
@@ -183,7 +209,7 @@ async def on_text_input(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Анализ текста с помощью ИИ пока в разработке.\n"
         "Используй поиск продукта или ручной ввод.",
-        reply_markup=add_meal_method_kb(),
+        reply_markup=add_meal_method_kb(ai_features_locked=_ai_features_locked(user)),
     )
     await state.set_state(AppState.adding_food)
 
@@ -192,19 +218,26 @@ async def on_text_input(message: Message, state: FSMContext) -> None:
 # --- Photo path ---
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.adding_food, F.data == "meal_method:photo")
-async def on_choose_photo(callback: CallbackQuery, state: FSMContext) -> None:
+async def on_choose_photo(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user: User,
+) -> None:
+    if await _answer_locked(callback, Feature.ai_photo_meal, user):
+        return
+
     await callback.message.edit_text("Отправь фото еды:")
     await state.set_state(AppState.food_photo_input)
     await callback.answer()
 
 
 @router.message(AppState.food_photo_input, F.photo)
-async def on_photo_input(message: Message, state: FSMContext) -> None:
+async def on_photo_input(message: Message, state: FSMContext, user: User) -> None:
     # AI photo analysis will be connected here
     await message.answer(
         "Анализ фото с помощью ИИ пока в разработке.\n"
         "Используй поиск продукта или ручной ввод.",
-        reply_markup=add_meal_method_kb(),
+        reply_markup=add_meal_method_kb(ai_features_locked=_ai_features_locked(user)),
     )
     await state.set_state(AppState.adding_food)
 
@@ -285,10 +318,14 @@ async def on_meal_type(
 # --- Back navigation (per-state) ---
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.food_search, F.data == "back:adding_food")
-async def back_to_adding_food(callback: CallbackQuery, state: FSMContext) -> None:
+async def back_to_adding_food(
+    callback: CallbackQuery,
+    state: FSMContext,
+    user: User,
+) -> None:
     await callback.message.edit_text(
         "Как добавить еду?",
-        reply_markup=add_meal_method_kb(),
+        reply_markup=add_meal_method_kb(ai_features_locked=_ai_features_locked(user)),
     )
     await state.set_state(AppState.adding_food)
     await callback.answer()

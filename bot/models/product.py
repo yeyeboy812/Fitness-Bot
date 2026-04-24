@@ -20,6 +20,9 @@ class ProductSource(enum.Enum):
     user = "user"
     ai = "ai"
     api = "api"
+    label = "label"
+    openfoodfacts = "openfoodfacts"
+    manual_pending = "manual_pending"
 
 
 class Product(TimestampMixin, Base):
@@ -39,12 +42,20 @@ class Product(TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     brand: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    barcode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    default_unit: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="g", server_default="g"
+    )
 
     calories_per_100g: Mapped[float] = mapped_column(Float, nullable=False)
     protein_per_100g: Mapped[float] = mapped_column(Float, nullable=False)
     fat_per_100g: Mapped[float] = mapped_column(Float, nullable=False)
     carbs_per_100g: Mapped[float] = mapped_column(Float, nullable=False)
 
+    confidence: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1.0"
+    )
     is_verified: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
@@ -77,5 +88,8 @@ class ProductAlias(TimestampMixin, Base):
         ForeignKey("products.id", ondelete="CASCADE"), nullable=False
     )
     alias: Mapped[str] = mapped_column(String(256), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(
+        String(256), nullable=False, default="", server_default="", index=True
+    )
 
     product: Mapped["Product"] = relationship(back_populates="aliases")

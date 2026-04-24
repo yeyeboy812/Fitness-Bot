@@ -1,57 +1,48 @@
 """Common handlers: /start, /help, /cancel."""
 
+from datetime import date
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     Message,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.access import is_admin
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
+from bot.services.user import is_profile_complete
 from bot.states.onboarding import OnboardingSG
 
 router = Router(name="common")
 
 
-def _start_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Открыть меню", callback_data="open_menu")],
-        ]
-    )
+async def _show_main_menu(
+    message: Message,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    from bot.handlers.main_menu import _build_menu_markup, _render_menu_header
 
-
-_WELCOME_TEXT = (
-    "Доброго времени суток, Чемпион!\n\n"
-    "Я — <b>Iron Fitness Bot</b>, твой персональный помощник "
-    "по питанию и тренировкам.\n\n"
-    "<b>Что я умею:</b>\n"
-    "• Считать калории и КБЖУ\n"
-    "• Вести дневник питания\n"
-    "• Логировать тренировки\n"
-    "• Показывать статистику и прогресс\n"
-    "• Хранить свои продукты и рецепты\n\n"
-    "<b>Полезные команды:</b>\n"
-    "/add — добавить приём пищи\n"
-    "/today — итоги дня\n"
-    "/workout — начать тренировку\n"
-    "/help — подсказка по разделам\n"
-    "/cancel — отменить текущее действие\n\n"
-    "Нажми кнопку ниже, чтобы начать 👇"
-)
+    text = await _render_menu_header(user, session, date.today())
+    markup = await _build_menu_markup(user, session)
+    await message.answer(text, reply_markup=markup)
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, user: User, state: FSMContext) -> None:
-    """Entry point. Redirects to onboarding if not completed, otherwise shows welcome."""
+async def cmd_start(
+    message: Message,
+    user: User,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Entry point. New users onboard; completed profiles get the main menu."""
     await state.clear()
 
-    if not user.onboarding_completed:
+    if not is_profile_complete(user):
         await message.answer(
             "Привет! Я — твой фитнес-помощник.\n"
             "Давай настрою всё под тебя.\n\n"
@@ -60,7 +51,7 @@ async def cmd_start(message: Message, user: User, state: FSMContext) -> None:
         await state.set_state(OnboardingSG.name)
         return
 
-    await message.answer(_WELCOME_TEXT, reply_markup=_start_kb())
+    await _show_main_menu(message, session, user)
 
 
 @router.message(Command("help"))

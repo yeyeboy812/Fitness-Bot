@@ -77,4 +77,5 @@ def test_main_menu_appends_shortcut_rows_before_pro():
         ("Мой день", "shortcut:bbb"),
     ]
     assert layout[4] == [("Статистика", "shortcut:ccc")]
-    assert layout[5] == [("⭐ Pro", "menu:pro")]
+    assert layout[5] == [("⚙️ Настройки", "menu:settings")]
+    assert layout[6] == [("⭐ Pro", "menu:pro")]

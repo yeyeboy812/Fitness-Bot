@@ -37,7 +37,7 @@ def main_menu_kb(
         [
             InlineKeyboardButton(text="🥗 Продукты", callback_data="menu:products"),
             InlineKeyboardButton(text="🧾 Рецепты", callback_data="menu:recipes"),
-        ]
+        ],
     ]
     if shortcuts:
         shortcut_buttons = [
@@ -47,6 +47,7 @@ def main_menu_kb(
         for idx in range(0, len(shortcut_buttons), 2):
             rows.append(shortcut_buttons[idx:idx + 2])
 
+    rows.append([InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")])
     rows.append([InlineKeyboardButton(text="⭐ Pro", callback_data="menu:pro")])
     if is_admin(user_id):
         admin_label = next(
@@ -108,13 +109,16 @@ def confirm_cancel_kb() -> InlineKeyboardMarkup:
     )
 
 
-def add_meal_method_kb() -> InlineKeyboardMarkup:
+def add_meal_method_kb(*, ai_features_locked: bool = False) -> InlineKeyboardMarkup:
+    text_label = "🔒 Описать текстом" if ai_features_locked else "Описать текстом"
+    photo_label = "🔒 Отправить фото" if ai_features_locked else "Отправить фото"
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Поиск продукта", callback_data="meal_method:search")],
             [InlineKeyboardButton(text="Ввести вручную", callback_data="meal_method:manual")],
-            [InlineKeyboardButton(text="Описать текстом", callback_data="meal_method:text")],
-            [InlineKeyboardButton(text="Отправить фото", callback_data="meal_method:photo")],
+            [InlineKeyboardButton(text=text_label, callback_data="meal_method:text")],
+            [InlineKeyboardButton(text=photo_label, callback_data="meal_method:photo")],
             [InlineKeyboardButton(text="Из рецепта", callback_data="meal_method:recipe")],
             [back_to_menu_button()],
         ]

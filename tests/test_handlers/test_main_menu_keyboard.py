@@ -19,6 +19,7 @@ EXPECTED_NON_ADMIN_LAYOUT = [
     [("🍽 Добавить еду", "menu:add_food"), ("📅 Мой день", "menu:my_day")],
     [("🏋️ Тренировка", "menu:workout"), ("📈 Статистика", "menu:stats")],
     [("🥗 Продукты", "menu:products"), ("🧾 Рецепты", "menu:recipes")],
+    [("⚙️ Настройки", "menu:settings")],
     [("⭐ Pro", "menu:pro")],
 ]
 
@@ -35,3 +36,14 @@ def test_main_menu_layout_for_regular_user_unchanged():
 def test_main_menu_has_no_admin_row_when_user_id_none():
     markup = main_menu_kb(user_id=None)
     assert _layout(markup) == EXPECTED_NON_ADMIN_LAYOUT
+
+
+def test_main_menu_has_settings_not_direct_profile():
+    layout = [
+        item
+        for row in _layout(main_menu_kb(user_id=123456789))
+        for item in row
+    ]
+
+    assert ("⚙️ Настройки", "menu:settings") in layout
+    assert ("👤 Профиль", "menu:profile") not in layout

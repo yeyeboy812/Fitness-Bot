@@ -15,8 +15,10 @@ from .common import router as common_router
 from .main_menu import router as main_menu_router
 from .nutrition import router as nutrition_router
 from .onboarding import router as onboarding_router
+from .profile import router as profile_router
 from .products import router as products_router
 from .recipes import router as recipes_router
+from .settings import router as settings_router
 from .subscription import router as subscription_router
 from .workout import router as workout_router
 
@@ -35,6 +37,8 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(workout_router)
     dp.include_router(recipes_router)
     dp.include_router(products_router)
+    dp.include_router(settings_router)
+    dp.include_router(profile_router)
     dp.include_router(analytics_router)
     # 6. Admin.
     dp.include_router(admin_router)
