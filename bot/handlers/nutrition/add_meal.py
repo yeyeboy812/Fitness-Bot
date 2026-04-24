@@ -20,9 +20,11 @@ from bot.keyboards.inline import add_meal_method_kb, meal_type_kb
 from bot.keyboards.nutrition import amount_prompt_kb, product_list_kb, search_prompt_kb
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
+from bot.repositories.agent import AgentEventRepository
 from bot.repositories.meal import MealRepository
 from bot.repositories.product import ProductRepository
 from bot.schemas.nutrition import MealCreate, MealItemCreate, MealItemSource
+from bot.services.agent_events import AgentEventService
 from bot.services.nutrition import NutritionService
 from bot.services.product import ProductService
 from bot.states.app import AppState
@@ -238,7 +240,23 @@ async def on_meal_type(
     )
 
     service = NutritionService(MealRepository(session))
-    await service.log_meal(user.id, meal_data)
+    meal = await service.log_meal(user.id, meal_data)
+    await AgentEventService(AgentEventRepository(session)).meal_logged(
+        user.id,
+        meal_id=meal.id,
+        source=data.get("source", "manual"),
+        payload={
+            "meal_type": meal_type,
+            "items_count": len(meal_data.items),
+            "amount_grams": data["amount_grams"],
+            "calories": data["cal"],
+            "protein": data["pro"],
+            "fat": data["fat"],
+            "carbs": data["carb"],
+            "product_id": data.get("selected_product_id"),
+            "product_name": data.get("selected_product_name"),
+        },
+    )
 
     # Increment product usage if from search
     if data.get("selected_product_id"):

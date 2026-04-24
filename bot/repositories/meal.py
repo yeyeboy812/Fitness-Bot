@@ -51,6 +51,62 @@ class MealRepository(BaseRepository[Meal]):
             "carbs": float(row.carbs),
         }
 
+    async def get_range_totals(
+        self, user_id: int, start: date, end: date
+    ) -> dict[str, float | int]:
+        """Sum KBJU + count meals across an inclusive date range."""
+        items_stmt = (
+            select(
+                func.coalesce(func.sum(MealItem.calories), 0).label("calories"),
+                func.coalesce(func.sum(MealItem.protein), 0).label("protein"),
+                func.coalesce(func.sum(MealItem.fat), 0).label("fat"),
+                func.coalesce(func.sum(MealItem.carbs), 0).label("carbs"),
+            )
+            .join(Meal, MealItem.meal_id == Meal.id)
+            .where(
+                Meal.user_id == user_id,
+                Meal.meal_date >= start,
+                Meal.meal_date <= end,
+            )
+        )
+        items_row = (await self.session.execute(items_stmt)).one()
+
+        meals_stmt = (
+            select(func.count())
+            .select_from(Meal)
+            .where(
+                Meal.user_id == user_id,
+                Meal.meal_date >= start,
+                Meal.meal_date <= end,
+            )
+        )
+        meals_count = await self.session.scalar(meals_stmt) or 0
+
+        return {
+            "calories": float(items_row.calories),
+            "protein": float(items_row.protein),
+            "fat": float(items_row.fat),
+            "carbs": float(items_row.carbs),
+            "meals_count": int(meals_count),
+        }
+
+    async def get_first_meal_date(self, user_id: int) -> date | None:
+        stmt = (
+            select(func.min(Meal.meal_date))
+            .where(Meal.user_id == user_id)
+        )
+        return await self.session.scalar(stmt)
+
+    async def get_active_dates(self, user_id: int) -> set[date]:
+        """Distinct dates on which the user logged at least one meal."""
+        stmt = (
+            select(Meal.meal_date)
+            .where(Meal.user_id == user_id)
+            .distinct()
+        )
+        result = await self.session.execute(stmt)
+        return {row[0] for row in result.all()}
+
     async def create_with_items(self, user_id: int, data: MealCreate) -> Meal:
         """Create a meal with all its items in one flush."""
         meal = Meal(

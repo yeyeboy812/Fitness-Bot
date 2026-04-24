@@ -10,7 +10,7 @@ from aiogram.types import (
     Message,
 )
 
-from bot.handlers.admin import is_admin
+from bot.access import is_admin
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
 from bot.states.onboarding import OnboardingSG

@@ -14,8 +14,10 @@ from bot.filters.menu import NotMainMenuFilter
 from bot.keyboards.inline import back_to_menu_kb
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
+from bot.repositories.agent import AgentEventRepository
 from bot.repositories.product import ProductRepository
 from bot.schemas.product import ProductCreate
+from bot.services.agent_events import AgentEventService
 from bot.services.product import ProductService
 from bot.states.nutrition import CreateProductSG
 from bot.utils.formatting import format_nutrition_line
@@ -95,6 +97,11 @@ async def on_nutrition(
 
     service = ProductService(ProductRepository(session))
     product = await service.create_user_product(user.id, product_data)
+    await AgentEventService(AgentEventRepository(session)).product_created(
+        user.id,
+        product.id,
+        product.name,
+    )
 
     await state.clear()
     await message.answer(

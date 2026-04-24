@@ -15,8 +15,10 @@ from bot.keyboards.onboarding import (
 )
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
+from bot.repositories.agent import AgentEventRepository
 from bot.repositories.user import UserRepository
 from bot.schemas.user import OnboardingData
+from bot.services.agent_events import AgentEventService
 from bot.services.calorie_calc import (
     ActivityLevel,
     Gender,
@@ -204,7 +206,10 @@ async def on_confirm(
     )
 
     service = UserService(user_repo)
-    await service.complete_onboarding(user.id, onboarding_data)
+    updated_user = await service.complete_onboarding(user.id, onboarding_data)
+    await AgentEventService(AgentEventRepository(user_repo.session)).onboarding_completed(
+        updated_user
+    )
 
     await state.clear()
     await callback.message.edit_text(

@@ -27,5 +27,3 @@ class ActivityCB(CallbackData, prefix="activity"):
     value: str
 
 
-class WorkoutActionCB(CallbackData, prefix="workout"):
-    action: str  # add_set, next_exercise, finish

@@ -17,9 +17,11 @@ from bot.keyboards.inline import back_to_menu_kb
 from bot.keyboards.nutrition import product_list_kb
 from bot.keyboards.reply import MAIN_MENU
 from bot.models.user import User
+from bot.repositories.agent import AgentEventRepository
 from bot.repositories.product import ProductRepository
 from bot.repositories.recipe import RecipeRepository
 from bot.schemas.recipe import RecipeCreate, RecipeIngredientCreate
+from bot.services.agent_events import AgentEventService
 from bot.services.product import ProductService
 from bot.services.recipe import RecipeService
 from bot.states.recipe import CreateRecipeSG
@@ -204,6 +206,11 @@ async def on_servings(
 
     service = RecipeService(RecipeRepository(session), ProductRepository(session))
     recipe = await service.create_recipe(user.id, recipe_data)
+    await AgentEventService(AgentEventRepository(session)).recipe_created(
+        user.id,
+        recipe.id,
+        recipe.name,
+    )
 
     await state.clear()
 
