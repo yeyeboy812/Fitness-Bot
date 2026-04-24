@@ -1,0 +1,1 @@
+"""Collector bot package."""

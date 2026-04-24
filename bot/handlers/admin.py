@@ -8,17 +8,13 @@ from aiogram.types import Message
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import settings
+from bot.access import is_admin
 from bot.models.meal import Meal
 from bot.models.user import User
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="admin")
-
-
-def is_admin(user_id: int | None) -> bool:
-    return user_id is not None and user_id in settings.admin_ids_set
 
 
 async def render_admin_dashboard(message: Message, session: AsyncSession) -> None:

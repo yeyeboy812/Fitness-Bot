@@ -6,7 +6,9 @@ from aiogram import BaseMiddleware
 from aiogram.types import Update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.repositories.agent import AgentEventRepository
 from bot.repositories.user import UserRepository
+from bot.services.agent_events import AgentEventService
 
 
 class UserInjectMiddleware(BaseMiddleware):
@@ -21,11 +23,16 @@ class UserInjectMiddleware(BaseMiddleware):
 
         if session and tg_user:
             repo = UserRepository(session)
-            user, _ = await repo.get_or_create(
+            user, created = await repo.get_or_create(
                 telegram_id=tg_user.id,
                 first_name=tg_user.first_name or "",
                 username=tg_user.username,
             )
+            if created:
+                await AgentEventService(AgentEventRepository(session)).user_seen(
+                    user,
+                    created=True,
+                )
             data["user"] = user
             data["user_repo"] = repo
 
