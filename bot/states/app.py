@@ -34,9 +34,19 @@ class AppState(StatesGroup):
     food_recipe_input = State()      # pick a saved recipe as meal
 
     # --- Workout flow ------------------------------------------------------
-    workout_name_input = State()     # waiting for exercise name
-    workout_set_input = State()      # waiting for "weight x reps"
-    workout_in_progress = State()    # between-sets choice (add / next / finish)
+    workout_type_select = State()            # picking section: warmup/gym/home/cooldown
+    workout_muscle_group_select = State()    # picking muscle group (gym only)
+    workout_exercise_select = State()        # picking exercise from catalog
+    workout_name_input = State()             # custom exercise name entry
+    workout_fullbody_group_pick = State()    # pick canonical group for custom full-body name
+    workout_load_choice = State()            # bodyweight: pick «no extra» / «with extra»
+    workout_weight_input = State()           # external-weight entry (kg)
+    workout_extra_weight_input = State()     # bodyweight + extra: extra weight (kg)
+    workout_reps_input = State()             # reps entry
+    workout_duration_input = State()         # duration entry (sec or mm:ss)
+    workout_set_input = State()              # legacy "weight x reps" — kept for compat
+    workout_in_progress = State()            # between-sets: add / finish-exercise / delete-last
+    workout_exercise_summary = State()       # after exercise finished: next / repeat / finish / back
 
     # --- Read-only / passive sections -------------------------------------
     # These are "transient" states — set briefly while rendering the section
@@ -82,9 +92,19 @@ _INTERRUPTIBLE_APP_STATES: frozenset[State] = frozenset({
     AppState.food_text_description,
     AppState.food_photo_input,
     AppState.food_recipe_input,
+    AppState.workout_type_select,
+    AppState.workout_muscle_group_select,
+    AppState.workout_exercise_select,
     AppState.workout_name_input,
+    AppState.workout_fullbody_group_pick,
+    AppState.workout_load_choice,
+    AppState.workout_weight_input,
+    AppState.workout_extra_weight_input,
+    AppState.workout_reps_input,
+    AppState.workout_duration_input,
     AppState.workout_set_input,
     AppState.workout_in_progress,
+    AppState.workout_exercise_summary,
 })
 
 _INTERRUPTIBLE_AUX_STATES: frozenset[State] = frozenset({

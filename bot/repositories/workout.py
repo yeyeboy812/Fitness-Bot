@@ -99,6 +99,74 @@ class WorkoutRepository(BaseRepository[Workout]):
             "training_minutes": minutes,
         }
 
+    async def get_range_activity(
+        self, user_id: int, start: date, end: date
+    ) -> dict[str, float | int]:
+        """Aggregate workouts across an inclusive date range.
+
+        Relies on eager-loaded exercises + sets; OK for the stats period
+        sizes we care about (a month of workouts is small in practice).
+        Safe with NULL estimated_calories_burned / NULL weights / NULL reps.
+        """
+        stmt = (
+            select(Workout)
+            .where(
+                Workout.user_id == user_id,
+                Workout.workout_date >= start,
+                Workout.workout_date <= end,
+            )
+            .options(
+                selectinload(Workout.exercises).selectinload(WorkoutExercise.sets)
+            )
+        )
+        result = await self.session.execute(stmt)
+        workouts = list(result.scalars().all())
+
+        burned = 0.0
+        workouts_count = len(workouts)
+        exercises_count = 0
+        sets_count = 0
+        volume = 0.0
+        minutes = 0
+
+        for w in workouts:
+            burned += w.estimated_calories_burned or 0.0
+            if w.started_at and w.finished_at:
+                delta = (w.finished_at - w.started_at).total_seconds() / 60.0
+                if delta > 0:
+                    minutes += int(round(delta))
+            exercises_count += len(w.exercises)
+            for we in w.exercises:
+                for s in we.sets:
+                    sets_count += 1
+                    volume += (s.weight_kg or 0.0) * (s.reps or 0)
+
+        return {
+            "burned_calories": round(burned, 1),
+            "workouts_count": workouts_count,
+            "exercises_count": exercises_count,
+            "sets_count": sets_count,
+            "total_volume_kg": round(volume, 1),
+            "training_minutes": minutes,
+        }
+
+    async def get_first_workout_date(self, user_id: int) -> date | None:
+        stmt = (
+            select(func.min(Workout.workout_date))
+            .where(Workout.user_id == user_id)
+        )
+        return await self.session.scalar(stmt)
+
+    async def get_active_dates(self, user_id: int) -> set[date]:
+        """Distinct dates on which the user logged at least one workout."""
+        stmt = (
+            select(Workout.workout_date)
+            .where(Workout.user_id == user_id)
+            .distinct()
+        )
+        result = await self.session.execute(stmt)
+        return {row[0] for row in result.all()}
+
     async def count_user_workouts(self, user_id: int) -> int:
         stmt = select(func.count()).select_from(Workout).where(Workout.user_id == user_id)
         return await self.session.scalar(stmt) or 0

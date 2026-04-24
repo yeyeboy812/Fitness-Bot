@@ -63,6 +63,19 @@ class WorkoutService:
             **kwargs,
         )
 
+    async def attach_exercise(
+        self,
+        workout_id: UUID,
+        exercise_id: UUID,
+        order: int,
+    ) -> WorkoutExercise:
+        """Attach an already-resolved Exercise row to a workout."""
+        return await self.workout_repo.add_exercise(
+            workout_id=workout_id,
+            exercise_id=exercise_id,
+            order=order,
+        )
+
     async def add_exercise_to_workout(
         self,
         workout_id: UUID,
@@ -70,6 +83,7 @@ class WorkoutService:
         exercise_name: str,
         order: int,
     ) -> WorkoutExercise:
+        """Legacy by-name attach (kept for backwards-compat)."""
         exercise, _ = await self.exercise_repo.get_or_create_user_exercise(
             name=exercise_name,
             user_id=user_id,
@@ -90,6 +104,11 @@ class WorkoutService:
         reps: int | None = None,
         duration_seconds: int | None = None,
         is_warmup: bool = False,
+        *,
+        load_mode: str | None = None,
+        user_body_weight_snapshot: float | None = None,
+        extra_weight_kg: float | None = None,
+        effective_weight_kg: float | None = None,
     ) -> WorkoutSet:
         return await self.workout_repo.add_set(
             workout_exercise_id=workout_exercise_id,
@@ -98,6 +117,10 @@ class WorkoutService:
             reps=reps,
             duration_seconds=duration_seconds,
             is_warmup=is_warmup,
+            load_mode=load_mode,
+            user_body_weight_snapshot=user_body_weight_snapshot,
+            extra_weight_kg=extra_weight_kg,
+            effective_weight_kg=effective_weight_kg,
         )
 
     async def get_today_workouts(

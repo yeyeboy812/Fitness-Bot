@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, DateTime, Float, Integer, SmallInteger, String, Uuid
 from sqlalchemy import ForeignKey
+
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -81,6 +82,14 @@ class WorkoutSet(TimestampMixin, Base):
     is_warmup: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+
+    # --- v2 load-tracking fields --------------------------------------------
+    # Capture the load model so analytics can tell "90kg bench press" from
+    # "90kg effective on pullups (75kg user + 15kg belt)".
+    load_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    user_body_weight_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extra_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    effective_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # --- relationships ---
     workout_exercise: Mapped["WorkoutExercise"] = relationship(back_populates="sets")
