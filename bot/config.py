@@ -24,6 +24,21 @@ def _parse_admin_ids(value: object) -> list[int]:
     return [int(chunk.strip()) for chunk in raw.split(",") if chunk.strip()]
 
 
+def _parse_debug_flag(value: object) -> bool:
+    """Accept common boolean-like env values, including deployment labels."""
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        return False
+
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on", "debug", "dev", "development"}:
+        return True
+    if raw in {"0", "false", "no", "off", "release", "prod", "production"}:
+        return False
+    return bool(raw)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -33,6 +48,8 @@ class Settings(BaseSettings):
 
     # Telegram
     bot_token: SecretStr
+    collector_bot_token: SecretStr = SecretStr("")
+    context_bot_token: SecretStr = SecretStr("")
     admin_ids: Annotated[list[int], BeforeValidator(_parse_admin_ids)] = []
 
     # Database
@@ -72,7 +89,7 @@ class Settings(BaseSettings):
 
     # General
     log_level: str = "INFO"
-    debug: bool = False
+    debug: Annotated[bool, BeforeValidator(_parse_debug_flag)] = False
 
     @property
     def admin_ids_set(self) -> set[int]:

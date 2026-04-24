@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["bot*"]
+include = ["bot*", "collector_bot*", "context_bot*"]
 
 [build-system]
 requires = ["setuptools>=75"]
