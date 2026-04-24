@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from bot.models.user import SubscriptionTier, User
+from bot.models.user import User
+from bot.services.entitlements import EntitlementService
 
 
 @dataclass(frozen=True)
@@ -48,12 +49,8 @@ def get_tariff(key: str) -> Tariff | None:
 
 def is_pro_active(user: User, now: datetime | None = None) -> bool:
     """User has active Pro tier."""
-    if user.subscription_tier != SubscriptionTier.pro:
-        return False
-    if user.subscription_expires_at is None:
-        return False
     current = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    return user.subscription_expires_at > current
+    return EntitlementService(now=current).is_pro_active(user)
 
 
 def extend_from(user: User, tariff: Tariff, now: datetime | None = None) -> datetime:
