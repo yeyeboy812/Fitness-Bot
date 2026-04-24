@@ -1,7 +1,17 @@
 .env
+.env.*
+!.env.example
+!.env.prod.example
+secrets/
+*.secret
+*.secrets
+*.key
+*.pem
+*.p12
 
 __pycache__/
 *.pyc
+*.pyo
 
 .venv/
 venv/
@@ -13,11 +23,25 @@ build/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+.idea/
+.vscode/
+.claude/
+.serena/
+*.log
 
 # Local databases
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.sqlite
+data/*.sqlite3
+data/backups/
+data/exports/
+data/imports/
+postgres_data/
+redis_data/
