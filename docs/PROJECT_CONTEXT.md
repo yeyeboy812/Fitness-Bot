@@ -1,6 +1,6 @@
 # Project Context
 
-Last generated: 2026-04-23 19:16
+Last generated: 2026-04-24 22:51
 
 This file is the compact startup memory for coding agents working in this repository.
 Read it before broad exploration, then inspect only the specific files needed for the task.
@@ -65,7 +65,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 ## Module Map
 
 - `bot/handlers`: Telegram I/O, callback parsing, message replies, FSM transitions. (19 files)
-- `bot/services`: Business logic, designed to be testable without Telegram. (18 files)
+- `bot/services`: Business logic, designed to be testable without Telegram. (19 files)
 - `bot/repositories`: SQLAlchemy query layer. (10 files)
 - `bot/models`: SQLAlchemy ORM schema. (10 files)
 - `bot/schemas`: Pydantic DTOs. (7 files)
@@ -74,9 +74,9 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/middlewares`: DB session, user injection, throttling, state logging. (5 files)
 - `bot/integrations`: External API wrappers. (3 files)
 - `collector_bot`: Second Telegram bot for collecting submissions. (8 files)
-- `tests`: pytest coverage for services, handlers, repositories. (11 files)
+- `tests`: pytest coverage for services, handlers, repositories. (12 files)
 - `alembic`: Database migrations. (8 files)
-- `scripts`: Local maintenance and seed scripts. (3 files)
+- `scripts`: Local maintenance and seed scripts. (5 files)
 
 ## File Inventory
 
@@ -84,9 +84,17 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 - `.claude/settings.local.json`
 
+### .dockerignore
+
+- `.dockerignore`
+
 ### .env.example
 
 - `.env.example`
+
+### .env.prod.example
+
+- `.env.prod.example`
 
 ### .gitignore
 
@@ -100,6 +108,8 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `.serena/memories/agent_bridge.md`
 - `.serena/memories/architecture_and_domain_rules.md`
 - `.serena/memories/coding_conventions.md`
+- `.serena/memories/context_bot_workspace.md`
+- `.serena/memories/project_assessment_2026_04_23.md`
 - `.serena/memories/project_overview.md`
 - `.serena/memories/suggested_commands.md`
 - `.serena/memories/task_completion_checklist.md`
@@ -117,6 +127,10 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 ### Dockerfile
 
 - `Dockerfile`
+
+### Makefile
+
+- `Makefile`
 
 ### README.md
 
@@ -199,7 +213,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/repositories/meal.py`
 - `bot/repositories/product.py`
 - `bot/repositories/recipe.py`
-- ... 38 more
+- ... 39 more
 
 ### collector_bot
 
@@ -233,12 +247,17 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 - `debug.log`
 
+### docker-compose.prod.yml
+
+- `docker-compose.prod.yml`
+
 ### docker-compose.yml
 
 - `docker-compose.yml`
 
 ### docs
 
+- `docs/DEPLOY.md`
 - `docs/PROJECT_CONTEXT.md`
 
 ### pyproject.toml
@@ -247,8 +266,10 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 ### scripts
 
+- `scripts/deploy.sh`
 - `scripts/seed_exercises.py`
 - `scripts/seed_products.py`
+- `scripts/server_bootstrap.sh`
 - `scripts/update_project_context.py`
 
 ### tests
@@ -262,6 +283,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `tests/test_services/test_analytics_period.py`
 - `tests/test_services/test_analytics_streak.py`
 - `tests/test_services/test_calorie_calc.py`
+- `tests/test_services/test_entitlements.py`
 - `tests/test_services/test_my_day.py`
 - `tests/test_services/test_workout_burned.py`
 
