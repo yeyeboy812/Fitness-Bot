@@ -1,12 +1,22 @@
 """Shared inline keyboard builders."""
 
+from typing import Protocol, Sequence
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.handlers.admin import is_admin
+from bot.access import is_admin
 from bot.states.app import INLINE_MENU_ACTIONS
 
 
-def main_menu_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
+class ShortcutButton(Protocol):
+    id: object
+    label: str
+
+
+def main_menu_kb(
+    user_id: int | None = None,
+    shortcuts: Sequence[ShortcutButton] | None = None,
+) -> InlineKeyboardMarkup:
     """Inline picker shown after the user taps the reply "Меню" button.
 
     Layout:
@@ -29,6 +39,14 @@ def main_menu_kb(user_id: int | None = None) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🧾 Рецепты", callback_data="menu:recipes"),
         ]
     ]
+    if shortcuts:
+        shortcut_buttons = [
+            InlineKeyboardButton(text=item.label, callback_data=f"shortcut:{item.id}")
+            for item in shortcuts
+        ]
+        for idx in range(0, len(shortcut_buttons), 2):
+            rows.append(shortcut_buttons[idx:idx + 2])
+
     rows.append([InlineKeyboardButton(text="⭐ Pro", callback_data="menu:pro")])
     if is_admin(user_id):
         admin_label = next(

@@ -25,14 +25,16 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from uuid import UUID
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.access import is_admin
 from bot.filters.menu import MainMenuFilter
-from bot.handlers.admin import is_admin, render_admin_dashboard
+from bot.handlers.admin import render_admin_dashboard
 from bot.handlers.analytics.dashboard import show_dashboard
 from bot.handlers.nutrition.add_meal import open_add_food
 from bot.handlers.nutrition.daily_summary import show_today
@@ -41,9 +43,16 @@ from bot.handlers.recipes.create import open_create_recipe
 from bot.handlers.subscription import open_subscription
 from bot.handlers.workout.start_workout import open_workout
 from bot.keyboards.inline import confirm_exit_kb, main_menu_kb
+from bot.keyboards.reply import MAIN_MENU
+from bot.models.agent import AgentEventType
 from bot.models.user import User
+from bot.repositories.agent import AgentEventRepository, UserShortcutRepository
 from bot.repositories.meal import MealRepository
-from bot.schemas.nutrition import DailySummary
+from bot.repositories.workout import WorkoutRepository
+from bot.services.agent_events import AgentEventService
+from bot.services.agent_shortcuts import AgentShortcutService
+from bot.services.analytics import _compute_streaks
+from bot.services.my_day import build_my_day_block, render_my_day_block
 from bot.services.nutrition import NutritionService
 from bot.states.app import INLINE_MENU_ACTIONS, is_interruptible
 
@@ -71,58 +80,45 @@ async def on_main_menu_button(
     The interruption prompt fires only when a concrete action is picked.
     """
     logger.info("menu_open user=%s", user.id)
+    event_service = AgentEventService(AgentEventRepository(session))
+    await event_service.record(AgentEventType.menu_opened, user_id=user.id)
+    text = await _render_menu_header(user, session, date.today())
+    await message.answer(text, reply_markup=await _build_menu_markup(user, session))
 
-    service = NutritionService(MealRepository(session))
-    summary = await service.get_daily_summary(
-        user.id,
-        date.today(),
-        calorie_norm=user.calorie_norm,
-        protein_norm=user.protein_norm,
-        fat_norm=user.fat_norm,
-        carb_norm=user.carb_norm,
+
+async def _render_menu_header(
+    user: User,
+    session: AsyncSession,
+    today: date,
+) -> str:
+    """Build the «Мой день» header shown above the inline action picker."""
+    meal_repo = MealRepository(session)
+    workout_repo = WorkoutRepository(session)
+
+    totals = await meal_repo.get_daily_totals(user.id, today)
+    workouts_today = len(await workout_repo.get_by_date(user.id, today))
+
+    meal_days = await meal_repo.get_active_dates(user.id)
+    workout_days = await workout_repo.get_active_dates(user.id)
+    current_streak, _ = _compute_streaks(meal_days | workout_days, today)
+
+    block = build_my_day_block(
+        calories_today=float(totals["calories"]),
+        calorie_goal=user.calorie_norm,
+        workouts_today=workouts_today,
+        current_streak=current_streak,
+        gender=user.gender,
     )
-    greeting = _progress_greeting(summary)
-
-    sections = [
-        "🍽 Питание и дневник",
-        "🏋️ Тренировки и прогресс",
-        "🥗 Свои продукты и рецепты",
-    ]
-    if is_admin(user.id):
-        sections.append("🔐 Админ-инструменты")
-
-    text = f"{greeting}\n\n" + "\n".join(sections)
-    await message.answer(text, reply_markup=main_menu_kb(user.id))
+    return render_my_day_block(block)
 
 
-def _progress_greeting(summary: DailySummary) -> str:
-    """Pick a motivational header based on today's nutrition progress.
-
-    Tiers (by calorie norm, with macro overshoot short-circuiting to the
-    'stop' tier):
-      • overshoot on any macro OR calories ≥ 100%  → stop
-      • calories ≥ 80% of norm                      → almost there
-      • any calories logged today                   → keep going
-      • nothing logged yet                          → start
-    """
-    cal = summary.total_calories
-    norm = summary.calorie_norm or 0
-
-    macros = [
-        (summary.total_calories, summary.calorie_norm),
-        (summary.total_protein, summary.protein_norm),
-        (summary.total_fat, summary.fat_norm),
-        (summary.total_carbs, summary.carb_norm),
-    ]
-    overshoot = any(current > target for current, target in macros if target)
-
-    if norm and (overshoot or cal >= norm):
-        return "✋ Остановись-ка, бейба."
-    if norm and cal >= norm * 0.8:
-        return "🎯 Ты уже на пороге большого события — сделай это!\n\n👇 Выбери раздел:"
-    if cal > 0:
-        return "🔥 Молодец, ты можешь ещё больше!\n\n👇 Выбери раздел:"
-    return "💪 Ну что, пора становиться сильным!\n\n👇 Выбери раздел:"
+async def _build_menu_markup(
+    user: User,
+    session: AsyncSession,
+) -> InlineKeyboardMarkup:
+    shortcut_service = AgentShortcutService(UserShortcutRepository(session))
+    shortcuts = await shortcut_service.list_menu_shortcuts(user.id)
+    return main_menu_kb(user.id, shortcuts=shortcuts)
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +142,11 @@ async def on_menu_action(
         "menu_pick user=%s action=%s current_state=%s",
         user.id, action, current_state,
     )
+    await AgentEventService(AgentEventRepository(session)).menu_action(
+        user.id,
+        action,
+        current_state=current_state,
+    )
 
     # Active scenario with unsaved progress → ask for confirmation.
     if is_interruptible(current_state):
@@ -161,6 +162,72 @@ async def on_menu_action(
     await state.clear()
     await _dispatch(action, callback.message, state, session, user)
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("shortcut:"))
+async def on_shortcut_action(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    try:
+        shortcut_id = UUID(callback.data.split(":", 1)[1])
+    except ValueError:
+        await callback.answer("Неверная кнопка", show_alert=True)
+        return
+
+    event_service = AgentEventService(AgentEventRepository(session))
+    shortcut_service = AgentShortcutService(
+        UserShortcutRepository(session),
+        NutritionService(MealRepository(session)),
+    )
+    shortcut = await shortcut_service.get_for_user(shortcut_id, user.id)
+    if shortcut is None:
+        await callback.answer("Кнопка больше недоступна", show_alert=True)
+        return
+
+    await event_service.shortcut_used(user.id, shortcut.id, shortcut.label)
+
+    current_state = await state.get_state()
+    result = await shortcut_service.execute(shortcut, user.id)
+
+    if result.action == "menu_action":
+        action = result.payload["action"]
+        await event_service.menu_action(
+            user.id,
+            action,
+            current_state=current_state,
+        )
+        if is_interruptible(current_state):
+            await state.update_data(pending_menu_action=action)
+            await callback.message.answer(
+                "У тебя есть незавершённое действие.\n"
+                "Выйти и перейти в другой раздел?",
+                reply_markup=confirm_exit_kb(action),
+            )
+            await callback.answer()
+            return
+
+        await state.clear()
+        await _dispatch(action, callback.message, state, session, user)
+        await callback.answer()
+        return
+
+    if result.action == "log_meal":
+        await event_service.meal_logged(
+            user.id,
+            meal_id=UUID(result.payload["meal_id"]),
+            source="shortcut",
+            payload={"shortcut_id": shortcut.id, "label": shortcut.label},
+        )
+        await state.clear()
+        await callback.message.answer(result.message)
+        await callback.message.answer("Что дальше?", reply_markup=MAIN_MENU)
+        await callback.answer("Сохранено!")
+        return
+
+    await callback.answer("Эта кнопка пока недоступна", show_alert=True)
 
 
 # ---------------------------------------------------------------------------
@@ -215,30 +282,16 @@ async def on_back_to_menu(
     user: User,
 ) -> None:
     await state.clear()
-    service = NutritionService(MealRepository(session))
-    summary = await service.get_daily_summary(
-        user.id,
-        date.today(),
-        calorie_norm=user.calorie_norm,
-        protein_norm=user.protein_norm,
-        fat_norm=user.fat_norm,
-        carb_norm=user.carb_norm,
+    await AgentEventService(AgentEventRepository(session)).record(
+        AgentEventType.menu_opened,
+        user_id=user.id,
     )
-    greeting = _progress_greeting(summary)
-
-    sections = [
-        "🍽 Питание и дневник",
-        "🏋️ Тренировки и прогресс",
-        "🥗 Свои продукты и рецепты",
-    ]
-    if is_admin(user.id):
-        sections.append("🔐 Админ-инструменты")
-
-    text = f"{greeting}\n\n" + "\n".join(sections)
+    text = await _render_menu_header(user, session, date.today())
+    markup = await _build_menu_markup(user, session)
     try:
-        await callback.message.edit_text(text, reply_markup=main_menu_kb(user.id))
+        await callback.message.edit_text(text, reply_markup=markup)
     except Exception:  # noqa: BLE001
-        await callback.message.answer(text, reply_markup=main_menu_kb(user.id))
+        await callback.message.answer(text, reply_markup=markup)
     await callback.answer()
 
 

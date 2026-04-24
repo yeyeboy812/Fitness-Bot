@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton
 
 DEFAULT_PAGE_SIZE = 8
 
