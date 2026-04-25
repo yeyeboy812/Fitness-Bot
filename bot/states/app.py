@@ -40,6 +40,7 @@ class AppState(StatesGroup):
     workout_name_input = State()             # custom exercise name entry
     workout_fullbody_group_pick = State()    # pick canonical group for custom full-body name
     workout_load_choice = State()            # bodyweight: pick «no extra» / «with extra»
+    workout_quick_set_input = State()        # external-weight quick input: "93x15"
     workout_weight_input = State()           # external-weight entry (kg)
     workout_extra_weight_input = State()     # bodyweight + extra: extra weight (kg)
     workout_reps_input = State()             # reps entry
@@ -105,6 +106,7 @@ _INTERRUPTIBLE_APP_STATES: frozenset[State] = frozenset({
     AppState.workout_name_input,
     AppState.workout_fullbody_group_pick,
     AppState.workout_load_choice,
+    AppState.workout_quick_set_input,
     AppState.workout_weight_input,
     AppState.workout_extra_weight_input,
     AppState.workout_reps_input,

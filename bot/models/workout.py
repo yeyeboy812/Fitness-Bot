@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from .exercise import Exercise
     from .user import User
 
 
@@ -59,6 +60,7 @@ class WorkoutExercise(TimestampMixin, Base):
 
     # --- relationships ---
     workout: Mapped["Workout"] = relationship(back_populates="exercises")
+    exercise: Mapped["Exercise"] = relationship()
     sets: Mapped[list["WorkoutSet"]] = relationship(
         back_populates="workout_exercise", cascade="all, delete-orphan",
         order_by="WorkoutSet.set_number",

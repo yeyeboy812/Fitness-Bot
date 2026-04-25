@@ -6,7 +6,7 @@ from uuid import UUID
 from bot.models.meal import Meal
 from bot.repositories.meal import MealRepository
 from bot.repositories.workout import WorkoutRepository
-from bot.schemas.nutrition import DailySummary, MealCreate
+from bot.schemas.nutrition import DailySummary, MealCreate, WorkoutActivityItem
 
 
 class NutritionService:
@@ -57,8 +57,14 @@ class NutritionService:
             workouts_count=int(activity.get("workouts_count", 0)),
             exercises_count=int(activity.get("exercises_count", 0)),
             sets_count=int(activity.get("sets_count", 0)),
+            reps_count=int(activity.get("reps_count", 0)),
+            duration_seconds=int(activity.get("duration_seconds", 0)),
             total_volume_kg=float(activity.get("total_volume_kg", 0.0)),
             training_minutes=int(activity.get("training_minutes", 0)),
+            workout_items=[
+                WorkoutActivityItem(**item)
+                for item in activity.get("items", [])
+            ],
         )
 
     async def delete_meal_item(self, user_id: int, item_id: UUID) -> bool:

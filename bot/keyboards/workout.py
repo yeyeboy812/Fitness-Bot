@@ -140,6 +140,21 @@ def workout_back_kb() -> InlineKeyboardMarkup:
     )
 
 
+def quick_set_input_kb() -> InlineKeyboardMarkup:
+    """External-weight set prompt: quick input plus legacy step-by-step."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✍️ Ввести пошагово",
+                    callback_data="workout:stepwise_set",
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="wback:step")],
+        ]
+    )
+
+
 def bodyweight_load_kb() -> InlineKeyboardMarkup:
     """Bodyweight exercise: ask about optional extra weight."""
     return InlineKeyboardMarkup(

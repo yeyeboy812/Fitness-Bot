@@ -30,6 +30,7 @@ from bot.keyboards.workout import (
     exercise_summary_kb,
     muscle_group_kb,
     primary_group_pick_kb,
+    quick_set_input_kb,
     set_action_kb,
     workout_back_kb,
     workout_section_kb,
@@ -52,7 +53,11 @@ from bot.models.exercise import (
 from bot.models.user import User
 from bot.repositories.exercise import ExerciseRepository
 from bot.repositories.workout import WorkoutRepository
-from bot.services.workout import WorkoutService, estimate_calories_burned
+from bot.services.workout import (
+    WorkoutService,
+    estimate_calories_burned,
+    parse_weight_reps_input,
+)
 from bot.states.app import AppState
 
 router = Router(name="start_workout")
@@ -135,6 +140,7 @@ _WORKOUT_NAV_STATES = (
     AppState.workout_name_input,
     AppState.workout_fullbody_group_pick,
     AppState.workout_load_choice,
+    AppState.workout_quick_set_input,
     AppState.workout_weight_input,
     AppState.workout_extra_weight_input,
     AppState.workout_reps_input,
@@ -238,6 +244,7 @@ async def _navigate_back(
 
     if current in (
         AppState.workout_load_choice.state,
+        AppState.workout_quick_set_input.state,
         AppState.workout_weight_input.state,
         AppState.workout_duration_input.state,
     ):
@@ -317,6 +324,9 @@ async def _navigate_back(
 async def open_workout(message: Message, state: FSMContext) -> None:
     await state.update_data(
         exercises=[],
+        workout_id=None,
+        current_workout_exercise_id=None,
+        next_exercise_order=1,
         workout_started_at=datetime.now(timezone.utc).isoformat(),
     )
     await message.answer(
@@ -652,6 +662,7 @@ async def _begin_exercise(
         current_exercise=exercise.name,
         current_log_mode=exercise.log_mode,
         current_load_mode=exercise.load_mode,
+        current_workout_exercise_id=None,
         sets=[],
         pending_weight=None,
         pending_extra=None,
@@ -688,10 +699,14 @@ async def _prompt_next_set_input(
 
     if load_mode == LOAD_EXTERNAL:
         await message.answer(
-            header + "Введи вес (кг), например: <code>60</code>",
-            reply_markup=workout_back_kb(),
+            header
+            + "Введи подход одним сообщением:\n"
+            + "<code>93x15</code> — 93 кг на 15 повторений\n"
+            + "<code>93х15</code> — тоже сработает\n\n"
+            + "Или выбери пошаговый ввод ниже.",
+            reply_markup=quick_set_input_kb(),
         )
-        await state.set_state(AppState.workout_weight_input)
+        await state.set_state(AppState.workout_quick_set_input)
         return
 
     if load_mode == LOAD_BW_OPT_EXTRA:
@@ -791,6 +806,7 @@ async def _begin_exercise_from_message(
         current_exercise=exercise.name,
         current_log_mode=exercise.log_mode,
         current_load_mode=exercise.load_mode,
+        current_workout_exercise_id=None,
         sets=[],
         pending_weight=None,
         pending_extra=None,
@@ -909,6 +925,39 @@ def _parse_duration(text: str) -> int | None:
     return n if n > 0 else None
 
 
+@router.callback_query(
+    AppState.workout_quick_set_input, F.data == "workout:stepwise_set"
+)
+async def on_stepwise_set(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.message.edit_text(
+        "Введи вес (кг), например: <code>60</code>",
+        reply_markup=workout_back_kb(),
+    )
+    await state.set_state(AppState.workout_weight_input)
+    await callback.answer()
+
+
+@router.message(AppState.workout_quick_set_input, NotMainMenuFilter())
+async def on_quick_set_input(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
+    parsed = parse_weight_reps_input(message.text or "")
+    if parsed is None:
+        await message.answer(
+            "Не понял подход. Напиши, например: 93x15 или нажми «Ввести пошагово».",
+            reply_markup=quick_set_input_kb(),
+        )
+        return
+
+    await state.update_data(pending_weight=parsed.weight_kg)
+    await _save_set_and_show_action(
+        message, state, session, user, reps=parsed.reps, duration=None
+    )
+
+
 @router.message(AppState.workout_weight_input, NotMainMenuFilter())
 async def on_weight_input(
     message: Message, state: FSMContext, user: User
@@ -950,7 +999,12 @@ async def on_extra_weight_input(
 
 
 @router.message(AppState.workout_reps_input, NotMainMenuFilter())
-async def on_reps_input(message: Message, state: FSMContext, user: User) -> None:
+async def on_reps_input(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
     reps = _parse_int(message.text or "")
     if reps is None or reps <= 0:
         await message.answer(
@@ -958,11 +1012,18 @@ async def on_reps_input(message: Message, state: FSMContext, user: User) -> None
             reply_markup=workout_back_kb(),
         )
         return
-    await _save_set_and_show_action(message, state, reps=reps, duration=None)
+    await _save_set_and_show_action(
+        message, state, session, user, reps=reps, duration=None
+    )
 
 
 @router.message(AppState.workout_duration_input, NotMainMenuFilter())
-async def on_duration_input(message: Message, state: FSMContext, user: User) -> None:
+async def on_duration_input(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+) -> None:
     seconds = _parse_duration(message.text or "")
     if seconds is None or seconds <= 0:
         await message.answer(
@@ -970,7 +1031,9 @@ async def on_duration_input(message: Message, state: FSMContext, user: User) -> 
             reply_markup=workout_back_kb(),
         )
         return
-    await _save_set_and_show_action(message, state, reps=None, duration=seconds)
+    await _save_set_and_show_action(
+        message, state, session, user, reps=None, duration=seconds
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1013,15 +1076,104 @@ def _render_set_line(s: dict, *, index: int) -> str:
     return f"  {index}. {_format_weight(float(w or 0))}кг × {reps}"
 
 
+def _render_confirmation_payload(s: dict) -> str:
+    load_mode = s.get("load_mode")
+    reps = s.get("reps")
+    duration = s.get("duration")
+    eff = s.get("effective_weight")
+
+    if load_mode == LOAD_TIME_ONLY or duration:
+        return _format_duration(int(duration or 0))
+    if load_mode == LOAD_NO_WEIGHT:
+        return f"{reps} повторений"
+    if load_mode == LOAD_BW_OPT_EXTRA:
+        extra = s.get("extra_weight") or 0.0
+        bw = s.get("user_body_weight_snapshot") or 0.0
+        if extra and extra > 0:
+            eff_str = _format_weight(float(eff or (bw + extra)))
+            return f"{eff_str} кг × {reps} повторений"
+        return f"{reps} повторений"
+
+    weight = eff if eff is not None else s.get("weight")
+    return f"{_format_weight(float(weight or 0))} кг × {reps} повторений"
+
+
+def _parse_uuid(value: object) -> UUID | None:
+    if not value:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
+
+
+async def _ensure_persistent_workout_exercise(
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    data: dict,
+) -> tuple[WorkoutService, UUID, UUID, dict]:
+    workout_service = WorkoutService(
+        WorkoutRepository(session),
+        ExerciseRepository(session),
+    )
+    updates: dict = {}
+
+    workout_id = _parse_uuid(data.get("workout_id"))
+    if workout_id is None:
+        now = datetime.now(timezone.utc)
+        started_at = _parse_started_at(data.get("workout_started_at"), fallback=now)
+        workout = await workout_service.start_workout(
+            user_id=user.id,
+            workout_date=date.today(),
+            name=None,
+            started_at=started_at,
+        )
+        workout_id = workout.id
+        updates["workout_id"] = str(workout_id)
+
+    workout_exercise_id = _parse_uuid(data.get("current_workout_exercise_id"))
+    if workout_exercise_id is None:
+        order = int(data.get("next_exercise_order") or len(data.get("exercises") or []) + 1)
+        exercise_id = _parse_uuid(data.get("current_exercise_id"))
+        if exercise_id is not None:
+            workout_exercise = await workout_service.attach_exercise(
+                workout_id=workout_id,
+                exercise_id=exercise_id,
+                order=order,
+            )
+        else:
+            workout_exercise = await workout_service.add_exercise_to_workout(
+                workout_id=workout_id,
+                user_id=user.id,
+                exercise_name=data.get("current_exercise") or "Без названия",
+                order=order,
+            )
+        workout_exercise_id = workout_exercise.id
+        updates["current_workout_exercise_id"] = str(workout_exercise_id)
+        updates["next_exercise_order"] = order + 1
+
+    if updates:
+        await state.update_data(**updates)
+
+    return workout_service, workout_id, workout_exercise_id, updates
+
+
 async def _save_set_and_show_action(
     message: Message,
     state: FSMContext,
+    session: AsyncSession,
+    user: User,
     *,
     reps: int | None,
     duration: int | None,
 ) -> None:
     data = await state.get_data()
     load_mode = data.get("current_load_mode") or LOAD_EXTERNAL
+    workout_service, workout_id, workout_exercise_id, updates = (
+        await _ensure_persistent_workout_exercise(state, session, user, data)
+    )
+    data = {**data, **updates}
 
     pending_weight = data.get("pending_weight")
     pending_extra = data.get("pending_extra")
@@ -1045,9 +1197,25 @@ async def _save_set_and_show_action(
         "extra_weight": pending_extra,
         "user_body_weight_snapshot": bw_snapshot,
         "effective_weight": effective,
+        "workout_id": str(workout_id),
+        "workout_exercise_id": str(workout_exercise_id),
     }
 
     sets = data.get("sets", [])
+    saved_set = await workout_service.log_set(
+        workout_exercise_id=workout_exercise_id,
+        set_number=len(sets) + 1,
+        weight_kg=effective if load_mode in (LOAD_EXTERNAL, LOAD_BW_OPT_EXTRA) else None,
+        reps=reps,
+        duration_seconds=duration,
+        is_warmup=data.get("current_section") == SECTION_WARMUP,
+        load_mode=load_mode,
+        user_body_weight_snapshot=bw_snapshot,
+        extra_weight_kg=pending_extra,
+        effective_weight_kg=effective,
+    )
+    set_entry["set_id"] = str(saved_set.id)
+
     sets.append(set_entry)
     await state.update_data(
         sets=sets,
@@ -1056,13 +1224,17 @@ async def _save_set_and_show_action(
         pending_bw_snapshot=None,
     )
 
-    confirm = "Подход сохранён: " + _render_set_line(set_entry, index=len(sets)).strip()
-    # Replace leading "N. " numbering with plain content for the confirmation line.
-    confirm_payload = confirm.split(". ", 1)[-1]
+    confirm_payload = _render_confirmation_payload(set_entry)
+    activity = await workout_service.workout_repo.get_daily_activity(user.id, date.today())
     await message.answer(
         f"✅ Подход сохранён: {confirm_payload}\n\n"
         f"<b>{data['current_exercise']}</b>\n"
-        + "\n".join(_render_set_line(s, index=i + 1) for i, s in enumerate(sets)),
+        + "\n".join(_render_set_line(s, index=i + 1) for i, s in enumerate(sets))
+        + "\n\n"
+        + (
+            "За сегодня записано: "
+            f"{activity['exercises_count']} упр., {activity['sets_count']} подх."
+        ),
         reply_markup=set_action_kb(),
     )
     await state.set_state(AppState.workout_in_progress)
@@ -1081,14 +1253,26 @@ async def on_add_set(
 
 @router.callback_query(AppState.workout_in_progress, F.data == "workout:delete_last_set")
 async def on_delete_last_set(
-    callback: CallbackQuery, state: FSMContext, user: User
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
 ) -> None:
     data = await state.get_data()
     sets = list(data.get("sets") or [])
     if not sets:
         await callback.answer("Нет подходов для удаления", show_alert=True)
         return
-    sets.pop()
+    removed = sets.pop()
+    set_id = _parse_uuid(removed.get("set_id"))
+    workout_exercise_id = _parse_uuid(
+        removed.get("workout_exercise_id") or data.get("current_workout_exercise_id")
+    )
+    if set_id is not None and workout_exercise_id is not None:
+        await WorkoutService(
+            WorkoutRepository(session),
+            ExerciseRepository(session),
+        ).delete_set(workout_exercise_id, set_id)
     await state.update_data(sets=sets)
 
     name = data.get("current_exercise", "Упражнение")
@@ -1145,6 +1329,7 @@ def _flush_current_exercise(data: dict) -> list[dict]:
     if data.get("current_exercise_id") and data.get("sets"):
         exercises.append({
             "exercise_id": data["current_exercise_id"],
+            "workout_exercise_id": data.get("current_workout_exercise_id"),
             "name": data.get("current_exercise") or "",
             "log_mode": data.get("current_log_mode"),
             "load_mode": data.get("current_load_mode"),
@@ -1175,6 +1360,7 @@ async def on_after_exercise_pick_next(
         current_exercise=None,
         current_log_mode=None,
         current_load_mode=None,
+        current_workout_exercise_id=None,
         sets=[],
         current_page=0,
     )
@@ -1227,6 +1413,7 @@ async def on_repeat_exercise(
     # Keep exercise_id/name/modes; reset the in-progress sets to a new round.
     await state.update_data(
         exercises=exercises,
+        current_workout_exercise_id=None,
         sets=[],
         pending_weight=None,
         pending_extra=None,
@@ -1249,6 +1436,19 @@ def _parse_started_at(raw: object, *, fallback: datetime) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _summarize_exercises(exercises: list[dict]) -> tuple[int, float]:
+    total_sets = 0
+    total_volume = 0.0
+    for ex in exercises:
+        for s in ex["sets"]:
+            total_sets += 1
+            effective = s.get("effective_weight")
+            reps = s.get("reps")
+            if effective and reps:
+                total_volume += float(effective) * int(reps)
+    return total_sets, total_volume
 
 
 @router.callback_query(AppState.workout_exercise_summary, F.data == "workout:finish")

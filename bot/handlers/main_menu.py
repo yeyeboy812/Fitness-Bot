@@ -97,7 +97,8 @@ async def _render_menu_header(
     workout_repo = WorkoutRepository(session)
 
     totals = await meal_repo.get_daily_totals(user.id, today)
-    workouts_today = len(await workout_repo.get_by_date(user.id, today))
+    activity = await workout_repo.get_daily_activity(user.id, today)
+    workouts_today = int(activity["workouts_count"])
 
     meal_days = await meal_repo.get_active_dates(user.id)
     workout_days = await workout_repo.get_active_dates(user.id)

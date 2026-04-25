@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from bot.models.meal import Meal
-    from bot.schemas.nutrition import DailySummary
+    from bot.schemas.nutrition import DailySummary, WorkoutActivityItem
 
 
 def format_nutrition_line(cal: float, protein: float, fat: float, carbs: float) -> str:
@@ -39,6 +39,36 @@ _MEAL_TYPE_LABELS = {
 }
 
 
+def _format_weight(value: float) -> str:
+    return f"{int(value)}" if float(value).is_integer() else f"{value:.1f}"
+
+
+def _format_duration(seconds: int) -> str:
+    seconds = max(int(seconds), 0)
+    if seconds < 60:
+        return f"{seconds} сек"
+    minutes, rest = divmod(seconds, 60)
+    if rest:
+        return f"{minutes}:{rest:02d}"
+    return f"{minutes} мин"
+
+
+def _format_workout_item(item: "WorkoutActivityItem") -> str:
+    if item.duration_seconds and not item.reps_total:
+        return _format_duration(item.duration_seconds)
+    if item.weight_kg is not None and item.reps_per_set is not None:
+        weight = _format_weight(item.weight_kg)
+        return f"{weight} кг × {item.reps_per_set} × {item.sets_count}"
+    if item.weight_kg is not None and item.reps_total:
+        weight = _format_weight(item.weight_kg)
+        return f"{weight} кг × {item.reps_total} повт. / {item.sets_count} подх."
+    if item.reps_per_set is not None:
+        return f"{item.reps_per_set} × {item.sets_count}"
+    if item.reps_total:
+        return f"{item.reps_total} повт. / {item.sets_count} подх."
+    return f"{item.sets_count} подх."
+
+
 def format_daily_summary(summary: "DailySummary", meals: list["Meal"]) -> str:
     """Format the «Мой день» screen.
 
@@ -69,19 +99,24 @@ def format_daily_summary(summary: "DailySummary", meals: list["Meal"]) -> str:
 
     # --- Activity block ------------------------------------------------
     lines.append("")
-    if summary.workouts_count > 0:
-        lines.append(f"🏋️ Тренировок сегодня: <b>{summary.workouts_count}</b>")
-        activity_bits: list[str] = []
-        if summary.sets_count:
-            activity_bits.append(f"🔁 Подходов: {summary.sets_count}")
-        if summary.training_minutes:
-            activity_bits.append(f"⏱ {summary.training_minutes} мин")
+    if summary.sets_count > 0:
+        lines.append("🏋️ <b>Тренировка сегодня</b>")
+        lines.append(f"• упражнений: {summary.exercises_count}")
+        lines.append(f"• подходов: {summary.sets_count}")
+        if summary.reps_count:
+            lines.append(f"• повторений: {summary.reps_count}")
+        if summary.duration_seconds:
+            lines.append(f"• длительность: {_format_duration(summary.duration_seconds)}")
         if summary.total_volume_kg > 0:
-            activity_bits.append(f"📦 {summary.total_volume_kg:.0f} кг")
-        if activity_bits:
-            lines.append("   " + " · ".join(activity_bits))
+            lines.append(f"• объём: {summary.total_volume_kg:.0f} кг")
+        if summary.workout_items:
+            lines.append("")
+            for item in summary.workout_items[:5]:
+                lines.append(
+                    f"• {item.exercise_name} — {_format_workout_item(item)}"
+                )
     else:
-        lines.append("🏋️ Тренировок сегодня: 0")
+        lines.append("🏋️ Тренировка сегодня: пока нет записанных подходов.")
 
     # --- Macros --------------------------------------------------------
     lines.append("")

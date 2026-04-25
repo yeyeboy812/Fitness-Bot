@@ -4,7 +4,7 @@ from datetime import date
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MealType(str, Enum):
@@ -41,6 +41,18 @@ class MealCreate(BaseModel):
     note: str | None = None
 
 
+class WorkoutActivityItem(BaseModel):
+    exercise_name: str
+    sets_count: int = 0
+    reps_total: int = 0
+    reps_per_set: int | None = None
+    duration_seconds: int = 0
+    total_volume_kg: float = 0.0
+    weight_kg: float | None = None
+    load_mode: str | None = None
+    log_mode: str | None = None
+
+
 class DailySummary(BaseModel):
     date: date
     total_calories: float = 0.0
@@ -57,5 +69,8 @@ class DailySummary(BaseModel):
     workouts_count: int = 0
     exercises_count: int = 0
     sets_count: int = 0
+    reps_count: int = 0
+    duration_seconds: int = 0
     total_volume_kg: float = 0.0
     training_minutes: int = 0
+    workout_items: list[WorkoutActivityItem] = Field(default_factory=list)

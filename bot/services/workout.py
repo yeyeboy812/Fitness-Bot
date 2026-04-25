@@ -1,6 +1,8 @@
 """Workout service — session management and logging."""
 
-from datetime import date
+import re
+from dataclasses import dataclass
+from datetime import date, datetime
 from uuid import UUID
 
 from bot.models.exercise import ExerciseType, MuscleGroup
@@ -14,6 +16,28 @@ BASE_MET = 3.5
 HIGH_MET = 5.0
 HIGH_SETS_THRESHOLD = 20
 HIGH_VOLUME_KG_THRESHOLD = 8000.0
+_WEIGHT_REPS_PATTERN = re.compile(
+    r"^\s*(?P<weight>\d+(?:[.,]\d+)?)\s*(?:кг|kg)?\s*[xх]\s*(?P<reps>\d+)\s*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class WeightRepsInput:
+    weight_kg: float
+    reps: int
+
+
+def parse_weight_reps_input(text: str) -> WeightRepsInput | None:
+    match = _WEIGHT_REPS_PATTERN.fullmatch(text or "")
+    if match is None:
+        return None
+
+    weight = float(match.group("weight").replace(",", "."))
+    reps = int(match.group("reps"))
+    if weight <= 0 or reps <= 0:
+        return None
+    return WeightRepsInput(weight_kg=weight, reps=reps)
 
 
 def estimate_calories_burned(
@@ -121,6 +145,22 @@ class WorkoutService:
             user_body_weight_snapshot=user_body_weight_snapshot,
             extra_weight_kg=extra_weight_kg,
             effective_weight_kg=effective_weight_kg,
+        )
+
+    async def delete_set(self, workout_exercise_id: UUID, workout_set_id: UUID) -> None:
+        await self.workout_repo.delete_set(workout_exercise_id, workout_set_id)
+
+    async def finish_workout(
+        self,
+        workout_id: UUID,
+        *,
+        finished_at: datetime,
+        estimated_calories_burned: float,
+    ) -> Workout | None:
+        return await self.workout_repo.finish_workout(
+            workout_id,
+            finished_at=finished_at,
+            estimated_calories_burned=estimated_calories_burned,
         )
 
     async def get_today_workouts(
