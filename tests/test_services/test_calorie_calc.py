@@ -2,6 +2,8 @@
 
 from bot.services.calorie_calc import (
     ActivityLevel,
+    FAT_G_PER_KG_MAX,
+    FAT_G_PER_KG_STANDARD,
     Gender,
     Goal,
     calculate_bmr,
@@ -49,19 +51,57 @@ class TestGoalAdjustment:
 
 
 class TestMacros:
-    def test_lose_macros(self):
+    def test_all_macros_rounded_to_10(self):
+        macros = calculate_macros(2000, Goal.lose, 80.0)
+        assert macros.protein_g % 10 == 0
+        assert macros.fat_g % 10 == 0
+        assert macros.carbs_g % 10 == 0
+
+    def test_fat_is_per_kg_not_share_of_calories(self):
+        # 80kg @ 0.9 g/kg = 72g raw → rounded to 70g.
+        # Old algorithm gave 27% of 2000 / 9 = 60g, so make sure we are not
+        # accidentally back to the share-of-calories formula on big calories:
+        # 80kg @ 0.9 g/kg = 72g raw → 70g rounded, regardless of total.
+        macros_low = calculate_macros(1800, Goal.maintain, 80.0)
+        macros_high = calculate_macros(3000, Goal.maintain, 80.0)
+        assert macros_low.fat_g == macros_high.fat_g == 70
+
+    def test_fat_capped_at_one_per_kg(self):
+        macros = calculate_macros(3500, Goal.gain, 80.0)
+        # Hard cap: never above weight * 1.0 g/kg.
+        assert macros.fat_g <= 80
+        assert macros.fat_g <= round(80.0 * FAT_G_PER_KG_MAX / 10) * 10
+
+    def test_lose_macros_balance(self):
         macros = calculate_macros(2000, Goal.lose, 80.0)
         assert macros.calories == 2000
-        assert macros.protein_g == round(80.0 * 2.2)  # 176
-        assert macros.fat_g > 0
-        assert macros.carbs_g > 0
-        # Total calories should roughly match
+        # 80kg lose: 2.2 g/kg → 176 → 180g protein.
+        assert macros.protein_g == 180
+        # 80kg @ 0.9 g/kg → 72g → 70g fat.
+        assert macros.fat_g == 70
+        assert macros.carbs_g >= 0
+        # Total calories should be close to target (rounding to 10 introduces
+        # up to ~50 kcal drift).
         total = macros.protein_g * 4 + macros.fat_g * 9 + macros.carbs_g * 4
-        assert abs(total - 2000) < 10  # small rounding tolerance
+        assert abs(total - 2000) <= 50
 
-    def test_maintain_macros(self):
+    def test_maintain_macros_protein_rounded(self):
+        # 75kg maintain: 1.8 g/kg → 135 → rounded to 140.
         macros = calculate_macros(2500, Goal.maintain, 75.0)
-        assert macros.protein_g == round(75.0 * 1.8)
+        assert macros.protein_g == 140
+
+    def test_carbs_never_negative_on_aggressive_deficit(self):
+        # 100kg with absurdly low calories: protein 220, fat 90 →
+        # 220*4 + 90*9 = 1690 cal of P+F alone, which exceeds 1000.
+        macros = calculate_macros(1000, Goal.lose, 100.0)
+        assert macros.carbs_g >= 0
+        # Protein and fat still locked to body weight.
+        assert macros.protein_g == 220
+        assert macros.fat_g == 90
+
+    def test_fat_standard_constant(self):
+        # Sanity-check the constant used as MVP default.
+        assert FAT_G_PER_KG_STANDARD == 0.9
 
 
 class TestFullPipeline:
@@ -74,8 +114,34 @@ class TestFullPipeline:
             activity_level=ActivityLevel.moderate,
             goal=Goal.lose,
         )
-        # Should produce reasonable results
         assert 1800 < norms.calories < 2800
-        assert norms.protein_g > 100
-        assert norms.fat_g > 40
-        assert norms.carbs_g > 100
+        # 85kg @ 0.9 g/kg = 76.5g → 80g rounded.
+        assert norms.fat_g == 80
+        # All macros multiples of 10.
+        assert norms.protein_g % 10 == 0
+        assert norms.fat_g % 10 == 0
+        assert norms.carbs_g % 10 == 0
+        # Profile has enough calories for non-zero carbs at this weight.
+        assert norms.carbs_g > 0
+
+    def test_recalc_uses_new_logic_after_weight_change(self):
+        # Models the UserService.recalculate_norms code path (same call site).
+        original = calculate_norms(
+            gender=Gender.male,
+            weight_kg=70.0,
+            height_cm=178,
+            age=30,
+            activity_level=ActivityLevel.moderate,
+            goal=Goal.maintain,
+        )
+        heavier = calculate_norms(
+            gender=Gender.male,
+            weight_kg=90.0,
+            height_cm=178,
+            age=30,
+            activity_level=ActivityLevel.moderate,
+            goal=Goal.maintain,
+        )
+        # Fat scales with body weight, not calories.
+        assert original.fat_g == 60   # 70 * 0.9 = 63 → 60
+        assert heavier.fat_g == 80    # 90 * 0.9 = 81 → 80

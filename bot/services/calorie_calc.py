@@ -43,6 +43,18 @@ GOAL_ADJUSTMENTS: dict[Goal, float] = {
     Goal.gain: 0.15,
 }
 
+# Fat g/kg of body weight. Standard is the MVP default; min/max bound the
+# safe range so the recommendation never drifts outside healthy ratios when
+# carbs become tight at low total calories.
+FAT_G_PER_KG_MIN = 0.8
+FAT_G_PER_KG_STANDARD = 0.9
+FAT_G_PER_KG_MAX = 1.0
+
+
+def _round_to_nearest_10(value: float) -> int:
+    """Round to the nearest 10 g; never return a negative number."""
+    return max(0, int(round(value / 10.0)) * 10)
+
 
 @dataclass(frozen=True)
 class MacroSplit:
@@ -78,10 +90,15 @@ def adjust_for_goal(tdee: float, goal: Goal) -> int:
 def calculate_macros(calories: int, goal: Goal, weight_kg: float) -> MacroSplit:
     """Calculate macronutrient split.
 
-    Protein: 1.6 g/kg (maintain) to 2.2 g/kg (lose) — higher protein
-             during deficit preserves muscle mass.
-    Fat:     25-30% of total calories.
-    Carbs:   remainder.
+    Protein: 1.8–2.2 g/kg depending on goal (higher during deficit to
+             preserve muscle mass).
+    Fat:     0.9 g/kg of body weight (MVP default), hard-capped at
+             1.0 g/kg so the recommendation never gets disproportionately
+             high. Independent of total calories.
+    Carbs:   remaining calories / 4 (after protein and fat). Floored at 0
+             when the deficit is too aggressive — never negative.
+
+    All macro grams are rounded to the nearest 10 g to avoid pseudo-precision.
     """
     protein_per_kg = {
         Goal.lose: 2.2,
@@ -89,14 +106,14 @@ def calculate_macros(calories: int, goal: Goal, weight_kg: float) -> MacroSplit:
         Goal.gain: 2.0,
     }
 
-    protein_g = round(weight_kg * protein_per_kg[goal])
-    fat_g = round(calories * 0.27 / 9)  # 27% of cals, 9 cal/g
-    carbs_g = round((calories - protein_g * 4 - fat_g * 9) / 4)
+    protein_raw = weight_kg * protein_per_kg[goal]
+    fat_raw = min(weight_kg * FAT_G_PER_KG_STANDARD, weight_kg * FAT_G_PER_KG_MAX)
 
-    # Safety: carbs should not be negative
-    if carbs_g < 50:
-        carbs_g = 50
-        fat_g = round((calories - protein_g * 4 - carbs_g * 4) / 9)
+    protein_g = _round_to_nearest_10(protein_raw)
+    fat_g = _round_to_nearest_10(fat_raw)
+
+    remaining = calories - protein_g * 4 - fat_g * 9
+    carbs_g = _round_to_nearest_10(remaining / 4) if remaining > 0 else 0
 
     return MacroSplit(
         calories=calories,
