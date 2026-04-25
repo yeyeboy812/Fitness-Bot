@@ -6,6 +6,7 @@ and by the main-menu dispatcher. Free-text state handlers apply
 gram amounts.
 """
 
+import logging
 from datetime import date
 from uuid import UUID
 
@@ -17,8 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.filters.menu import NotMainMenuFilter
 from bot.keyboards.inline import add_meal_method_kb, meal_type_kb
-from bot.keyboards.nutrition import amount_prompt_kb, product_list_kb, search_prompt_kb
-from bot.keyboards.reply import MAIN_MENU
+from bot.keyboards.nutrition import (
+    amount_prompt_kb,
+    meal_added_actions_kb,
+    manual_prompt_kb,
+    product_list_kb,
+    search_prompt_kb,
+)
 from bot.models.user import User
 from bot.repositories.agent import AgentEventRepository
 from bot.repositories.meal import MealRepository
@@ -32,6 +38,16 @@ from bot.states.app import AppState
 from bot.utils.formatting import format_nutrition_line
 
 router = Router(name="add_meal")
+logger = logging.getLogger(__name__)
+
+
+_MANUAL_PROMPT = (
+    "Введи продукт и вес.\n\n"
+    "Вес указывай в сухом/сыром виде.\n"
+    "Например:\n"
+    "<code>рис 80 г</code> — 80 г сухого риса до варки\n"
+    "<code>курица 150 г</code> — 150 г сырого/исходного продукта"
+)
 
 
 def _ai_features_locked(user: User) -> bool:
@@ -44,6 +60,13 @@ async def _answer_locked(callback: CallbackQuery, feature: Feature, user: User) 
         return False
     await callback.answer(decision.reason or "Доступно в Pro.", show_alert=True)
     return True
+
+
+def _format_display_number(value: float, *, integer: bool = False) -> str:
+    rounded = round(float(value), 1)
+    if integer or rounded.is_integer():
+        return str(int(round(rounded)))
+    return f"{rounded:.1f}".rstrip("0").rstrip(".")
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +162,7 @@ async def on_select_product(
     await callback.message.edit_text(
         f"<b>{product.name}</b>\n"
         f"{format_nutrition_line(product.calories_per_100g, product.protein_per_100g, product.fat_per_100g, product.carbs_per_100g)}\n\n"
+        "Вес указывай в сухом/сыром виде.\n\n"
         "Сколько грамм? (например: 250)",
         reply_markup=amount_prompt_kb(),
     )
@@ -171,6 +195,7 @@ async def on_set_amount(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"<b>{data['selected_product_name']}</b> — {grams:.0f}г\n"
         f"{format_nutrition_line(cal, pro, fat, carb)}\n\n"
+        "Вес указан в сухом/сыром виде.\n"
         "Выбери тип приёма пищи:",
         reply_markup=meal_type_kb(),
     )
@@ -243,6 +268,49 @@ async def on_photo_input(message: Message, state: FSMContext, user: User) -> Non
 
 
 # ---------------------------------------------------------------------------
+# --- Manual entry path ---
+# ---------------------------------------------------------------------------
+@router.callback_query(AppState.adding_food, F.data == "meal_method:manual")
+async def on_choose_manual(callback: CallbackQuery, state: FSMContext) -> None:
+    """Route the user into the manual food-entry state.
+
+    Always answers the callback first so the Telegram spinner clears even if
+    edit_text or the state transition fails. On error, surfaces a safe
+    message instead of leaving the user stuck.
+    """
+    await callback.answer()
+    try:
+        await callback.message.edit_text(_MANUAL_PROMPT, reply_markup=manual_prompt_kb())
+        await state.set_state(AppState.food_manual_input)
+    except Exception:  # noqa: BLE001 — fallback path, must not crash the handler
+        logger.exception("Failed to open manual food entry")
+        await callback.message.answer(
+            "Не получилось открыть ручной ввод. Попробуй ещё раз или вернись назад.",
+            reply_markup=manual_prompt_kb(),
+        )
+
+
+@router.message(AppState.food_manual_input, NotMainMenuFilter())
+async def on_manual_input(message: Message, state: FSMContext, user: User) -> None:
+    """Placeholder — full parser of free-form 'name + amount' is future work.
+
+    For now, surface a safe response so the user is not silently stuck after
+    the state transition; the structured parser will replace this stub.
+    """
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(_MANUAL_PROMPT, reply_markup=manual_prompt_kb())
+        return
+    await state.update_data(raw_manual_text=text)
+    await message.answer(
+        "Парсер ручного ввода пока в разработке.\n"
+        "Используй поиск продукта.",
+        reply_markup=add_meal_method_kb(ai_features_locked=_ai_features_locked(user)),
+    )
+    await state.set_state(AppState.adding_food)
+
+
+# ---------------------------------------------------------------------------
 # --- Meal type selection and save ---
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.food_meal_type, F.data.startswith("meal_type:"))
@@ -298,26 +366,36 @@ async def on_meal_type(
 
     await state.clear()
 
-    type_labels = {
-        "breakfast": "Завтрак",
-        "lunch": "Обед",
-        "dinner": "Ужин",
-        "snack": "Перекус",
-    }
+    product_name = data.get("selected_product_name", "Без названия")
     await callback.message.edit_text(
-        f"Записано! {type_labels.get(meal_type, meal_type)}:\n"
-        f"<b>{data.get('selected_product_name', '')}</b> — {data['amount_grams']:.0f}г\n"
-        f"{format_nutrition_line(data['cal'], data['pro'], data['fat'], data['carb'])}"
+        "Добавлено:\n"
+        f"{product_name} — {_format_display_number(data['amount_grams'])} г\n"
+        f"≈ {_format_display_number(data['cal'], integer=True)} ккал / "
+        f"Б {_format_display_number(data['pro'])} / "
+        f"Ж {_format_display_number(data['fat'])} / "
+        f"У {_format_display_number(data['carb'])}\n\n"
+        "Что дальше?",
+        reply_markup=meal_added_actions_kb(),
     )
-    # Flow done — return to idle and restore the reply "Меню" button.
-    await callback.message.answer("Что дальше?", reply_markup=MAIN_MENU)
     await callback.answer("Сохранено!")
+
+
+@router.callback_query(F.data == "meal:add_another")
+async def on_add_another_product(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.message.edit_text(
+        "Введи название продукта для поиска:",
+        reply_markup=search_prompt_kb(),
+    )
+    await state.set_state(AppState.food_search)
+    await callback.answer()
 
 
 # ---------------------------------------------------------------------------
 # --- Back navigation (per-state) ---
 # ---------------------------------------------------------------------------
 @router.callback_query(AppState.food_search, F.data == "back:adding_food")
+@router.callback_query(AppState.food_manual_input, F.data == "back:adding_food")
 async def back_to_adding_food(
     callback: CallbackQuery,
     state: FSMContext,
@@ -378,6 +456,7 @@ async def back_to_food_amount(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.message.edit_text(
         f"<b>{data['selected_product_name']}</b>\n"
         f"{format_nutrition_line(data['cal_100'], data['pro_100'], data['fat_100'], data['carb_100'])}\n\n"
+        "Вес указывай в сухом/сыром виде.\n\n"
         "Сколько грамм? (например: 250)",
         reply_markup=amount_prompt_kb(),
     )

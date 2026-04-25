@@ -1,6 +1,6 @@
 # Project Context
 
-Last generated: 2026-04-24 23:47
+Last generated: 2026-04-25 13:34
 
 This file is the compact startup memory for coding agents working in this repository.
 Read it before broad exploration, then inspect only the specific files needed for the task.
@@ -65,7 +65,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 ## Module Map
 
 - `bot/handlers`: Telegram I/O, callback parsing, message replies, FSM transitions. (21 files)
-- `bot/services`: Business logic, designed to be testable without Telegram. (19 files)
+- `bot/services`: Business logic, designed to be testable without Telegram. (20 files)
 - `bot/repositories`: SQLAlchemy query layer. (10 files)
 - `bot/models`: SQLAlchemy ORM schema. (10 files)
 - `bot/schemas`: Pydantic DTOs. (7 files)
@@ -74,8 +74,8 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/middlewares`: DB session, user injection, throttling, state logging. (5 files)
 - `bot/integrations`: External API wrappers. (3 files)
 - `collector_bot`: Second Telegram bot for collecting submissions. (8 files)
-- `tests`: pytest coverage for services, handlers, repositories. (15 files)
-- `alembic`: Database migrations. (9 files)
+- `tests`: pytest coverage for services, handlers, repositories. (22 files)
+- `alembic`: Database migrations. (10 files)
 - `scripts`: Local maintenance and seed scripts. (6 files)
 
 ## File Inventory
@@ -110,12 +110,15 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `.serena/memories/coding_conventions.md`
 - `.serena/memories/context_bot_workspace.md`
 - `.serena/memories/entitlements_and_pro_gating.md`
+- `.serena/memories/nutrition_followup_and_menu_progress.md`
 - `.serena/memories/profile_personalization_flow.md`
 - `.serena/memories/project_assessment_2026_04_23.md`
 - `.serena/memories/project_overview.md`
+- `.serena/memories/settings_profile_personalization_flow.md`
 - `.serena/memories/start_onboarding_idempotency.md`
 - `.serena/memories/suggested_commands.md`
 - `.serena/memories/task_completion_checklist.md`
+- `.serena/memories/workout_persistence_and_quick_input.md`
 - `.serena/project.local.yml`
 - `.serena/project.yml`
 
@@ -150,6 +153,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `alembic/versions/20260423_agent_bridge.py`
 - `alembic/versions/20260423_workout_expansion.py`
 - `alembic/versions/20260424_food_catalog.py`
+- `alembic/versions/20260425_body_composition.py`
 
 ### alembic.ini
 
@@ -217,7 +221,7 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 - `bot/repositories/__init__.py`
 - `bot/repositories/agent.py`
 - `bot/repositories/base.py`
-- ... 43 more
+- ... 44 more
 
 ### collector_bot
 
@@ -281,19 +285,26 @@ Handlers do Telegram I/O and FSM. Services hold testable business logic. Reposit
 
 - `tests/test_handlers/__init__.py`
 - `tests/test_handlers/test_add_meal_entitlements.py`
+- `tests/test_handlers/test_add_meal_followup.py`
+- `tests/test_handlers/test_add_meal_manual.py`
 - `tests/test_handlers/test_main_menu_keyboard.py`
+- `tests/test_handlers/test_main_menu_nutrition_progress.py`
 - `tests/test_handlers/test_profile.py`
 - `tests/test_handlers/test_start_idempotent.py`
 - `tests/test_handlers/test_stats_dashboard.py`
+- `tests/test_handlers/test_workout_quick_input.py`
 - `tests/test_repositories/test_agent_bridge.py`
 - `tests/test_repositories/test_exercise_catalog.py`
 - `tests/test_services/test_agent_commands.py`
 - `tests/test_services/test_analytics_period.py`
 - `tests/test_services/test_analytics_streak.py`
+- `tests/test_services/test_body_composition.py`
 - `tests/test_services/test_calorie_calc.py`
 - `tests/test_services/test_entitlements.py`
 - `tests/test_services/test_my_day.py`
 - `tests/test_services/test_workout_burned.py`
+- `tests/test_services/test_workout_daily_activity.py`
+- `tests/test_services/test_workout_quick_input.py`
 
 ## Agent Workflow
 

@@ -69,6 +69,18 @@ class User(TimestampMixin, Base):
     fat_norm: Mapped[int | None] = mapped_column(nullable=True)
     carb_norm: Mapped[int | None] = mapped_column(nullable=True)
 
+    # --- body composition (US Navy method, optional) ---------------------
+    neck_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    waist_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hip_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_fat_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lean_mass_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    macro_basis_weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_composition_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    body_composition_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
         SAEnum(SubscriptionTier, name="subscription_tier_enum"),

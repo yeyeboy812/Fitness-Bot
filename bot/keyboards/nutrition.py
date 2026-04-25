@@ -26,6 +26,32 @@ def amount_prompt_kb() -> InlineKeyboardMarkup:
     )
 
 
+def manual_prompt_kb() -> InlineKeyboardMarkup:
+    """Keyboard shown with the 'enter food manually' prompt.
+
+    Back returns to the add-meal method picker; cancel exits the flow via
+    the global ``cancel`` handler in common.py.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back:adding_food")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")],
+        ]
+    )
+
+
+def meal_added_actions_kb() -> InlineKeyboardMarkup:
+    """Actions shown after a meal item has been saved."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить ещё продукт", callback_data="meal:add_another")],
+            [InlineKeyboardButton(text="📊 Мой день", callback_data="menu:my_day")],
+            [InlineKeyboardButton(text="🍽️ В питание", callback_data="menu:add_food")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back:main_menu")],
+        ]
+    )
+
+
 def product_list_kb(products: list[Product]) -> InlineKeyboardMarkup:
     """Build inline keyboard from product search results."""
     buttons = [

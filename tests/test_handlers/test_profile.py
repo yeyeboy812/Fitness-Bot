@@ -4,6 +4,7 @@ import pytest
 
 from bot.handlers import profile, settings
 from bot.models.user import ActivityLevel, Gender, Goal, User
+from bot.services.body_composition import BodyCompGender, estimate_body_composition
 from bot.services.user import UserService
 from bot.states.app import AppState
 
@@ -181,6 +182,133 @@ async def test_weight_change_is_not_saved_before_confirmation(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_goal_edit_buttons_use_enum_values():
+    state = AsyncMock()
+    callback = _callback("profile:edit:goal")
+
+    await profile.on_profile_edit(callback, state, _user())
+
+    markup = callback.message.edit_text.await_args.kwargs["reply_markup"]
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert "profile:value:goal:lose" in callbacks
+    assert "profile:value:goal:maintain" in callbacks
+    assert "profile:value:goal:gain" in callbacks
+    state.set_state.assert_awaited_with(AppState.profile_value_input)
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_goal_choice_shows_before_after_confirmation():
+    state = AsyncMock()
+    callback = _callback("profile:value:goal:lose")
+    user = _user()
+
+    await profile.on_profile_choice(callback, state, user)
+
+    text = callback.message.edit_text.await_args.args[0]
+    assert "Было:" in text
+    assert "Стало:" in text
+    assert "Поддерживать вес" in text
+    assert "Похудеть" in text
+    state.update_data.assert_awaited_with(
+        pending_profile_field="goal",
+        pending_profile_value="lose",
+    )
+    state.set_state.assert_awaited_with(AppState.profile_confirm)
+    callback.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_goal_change_recalculates_norms_in_user_service():
+    user = _user()
+
+    updated = await UserService(FakeRepo(user)).update_profile_field(user.id, "goal", "lose")
+
+    assert updated.goal == "lose"
+    assert updated.calorie_norm != 2500
+    assert updated.protein_norm > 140
+
+
+@pytest.mark.asyncio
+async def test_body_composition_save_uses_lean_mass_for_high_weight_macros():
+    user = _user()
+    user.height_cm = 178
+    user.weight_kg = 140
+    result = estimate_body_composition(
+        gender=BodyCompGender.male,
+        height_cm=178,
+        weight_kg=140,
+        neck_cm=45,
+        waist_cm=125,
+    )
+
+    updated = await UserService(FakeRepo(user)).update_body_composition(
+        user.id,
+        neck_cm=45,
+        waist_cm=125,
+        hip_cm=None,
+        result=result,
+    )
+
+    assert updated.lean_mass_kg == 88.7
+    assert updated.macro_basis_weight_kg == 88.7
+    assert updated.fat_norm == 80
+    assert updated.fat_norm < 130
+
+
+@pytest.mark.asyncio
+async def test_goal_cancel_does_not_change_goal():
+    state = AsyncMock()
+    state.get_data.return_value = {
+        "pending_profile_field": "goal",
+        "pending_profile_value": "lose",
+    }
+    user = _user()
+
+    await profile.on_profile_cancel(_callback("profile:cancel"), state, user)
+
+    assert user.goal == Goal.maintain
+    state.set_state.assert_awaited_with(AppState.viewing_profile)
+
+
+@pytest.mark.asyncio
+async def test_high_bmi_gain_goal_requires_extra_confirmation():
+    state = AsyncMock()
+    callback = _callback("profile:value:goal:gain")
+    user = _user()
+    user.height_cm = 178
+    user.weight_kg = 140
+
+    await profile.on_profile_choice(callback, state, user)
+
+    text = callback.message.edit_text.await_args.args[0]
+    assert "набор массы может быть не лучшей целью" in text
+    assert "Всё равно выбрать набор массы" in text
+    state.update_data.assert_awaited_with(
+        pending_profile_field="goal",
+        pending_profile_value="gain",
+        pending_goal_gain_warning=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_high_bmi_gain_cancel_returns_to_goal_choice():
+    state = AsyncMock()
+    state.get_data.return_value = {
+        "pending_profile_field": "goal",
+        "pending_profile_value": "gain",
+        "pending_goal_gain_warning": True,
+    }
+    callback = _callback("profile:cancel")
+
+    await profile.on_profile_cancel(callback, state, _user())
+
+    text = callback.message.edit_text.await_args.args[0]
+    assert "Выбери новую цель" in text
+    state.set_state.assert_awaited_with(AppState.profile_value_input)
+
+
+@pytest.mark.asyncio
 async def test_name_change_is_saved_only_after_confirmation(monkeypatch):
     calls = []
 
@@ -242,7 +370,8 @@ async def test_weight_change_recalculates_norms_in_user_service():
 
     assert updated.weight_kg == 80.0
     assert updated.calorie_norm != 2500
-    assert updated.protein_norm == 144
+    # 80kg maintain @ 1.8 g/kg = 144 raw, rounded to 140 (round-to-10 macros).
+    assert updated.protein_norm == 140
 
 
 @pytest.mark.asyncio

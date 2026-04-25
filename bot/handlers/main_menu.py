@@ -53,7 +53,11 @@ from bot.repositories.workout import WorkoutRepository
 from bot.services.agent_events import AgentEventService
 from bot.services.agent_shortcuts import AgentShortcutService
 from bot.services.analytics import _compute_streaks
-from bot.services.my_day import build_my_day_block, render_my_day_block
+from bot.services.my_day import (
+    build_my_day_block,
+    format_today_nutrition_progress,
+    render_my_day_block,
+)
 from bot.services.nutrition import NutritionService
 from bot.states.app import INLINE_MENU_ACTIONS, is_interruptible
 
@@ -111,7 +115,17 @@ async def _render_menu_header(
         current_streak=current_streak,
         gender=user.gender,
     )
-    return render_my_day_block(block)
+    nutrition_progress = format_today_nutrition_progress(
+        current_calories=float(totals["calories"]),
+        target_calories=user.calorie_norm,
+        current_protein=float(totals["protein"]),
+        target_protein=user.protein_norm,
+        current_fat=float(totals["fat"]),
+        target_fat=user.fat_norm,
+        current_carbs=float(totals["carbs"]),
+        target_carbs=user.carb_norm,
+    )
+    return f"{render_my_day_block(block)}\n\n{nutrition_progress}"
 
 
 async def _build_menu_markup(

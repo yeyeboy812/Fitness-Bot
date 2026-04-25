@@ -24,6 +24,12 @@ def profile_kb() -> InlineKeyboardMarkup:
                 )
             ],
             [
+                InlineKeyboardButton(
+                    text="📏 Состав тела / точный расчёт",
+                    callback_data="profile:body_comp:start",
+                )
+            ],
+            [
                 InlineKeyboardButton(text="⬅️ Назад", callback_data="profile:back_settings"),
                 InlineKeyboardButton(text="🎯 Меню", callback_data="profile:menu"),
             ],
@@ -41,9 +47,12 @@ def profile_back_kb() -> InlineKeyboardMarkup:
 
 
 def profile_choice_kb(field: str, choices: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+    # ``choices`` are (value, label) tuples — same order as ``dict.items()``.
+    # Button text shows the human-readable label; callback_data carries the
+    # internal value key used by the handler.
     rows = [
         [InlineKeyboardButton(text=label, callback_data=f"profile:value:{field}:{value}")]
-        for label, value in choices
+        for value, label in choices
     ]
     rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="profile:back")])
     rows.append([InlineKeyboardButton(text="🎯 Меню", callback_data="profile:menu")])
@@ -56,6 +65,24 @@ def profile_confirm_kb() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="✅ Сохранить", callback_data="profile:save"),
                 InlineKeyboardButton(text="↩️ Отменить", callback_data="profile:cancel"),
+            ],
+            [InlineKeyboardButton(text="🎯 Меню", callback_data="profile:menu")],
+        ]
+    )
+
+
+def body_composition_confirm_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Сохранить",
+                    callback_data="profile:body_comp:save",
+                ),
+                InlineKeyboardButton(
+                    text="↩️ Отменить",
+                    callback_data="profile:body_comp:cancel",
+                ),
             ],
             [InlineKeyboardButton(text="🎯 Меню", callback_data="profile:menu")],
         ]

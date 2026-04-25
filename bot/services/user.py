@@ -1,10 +1,16 @@
 """User service — profile management and norm calculation."""
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 from bot.models.user import User
 from bot.repositories.user import UserRepository
 from bot.schemas.user import OnboardingData
+from bot.services.body_composition import (
+    BodyCompositionError,
+    BodyCompositionResult,
+    calculate_lean_mass,
+    select_macro_basis_weight,
+)
 from bot.services.calorie_calc import (
     ActivityLevel,
     Gender,
@@ -94,6 +100,8 @@ class UserService:
             raise ValueError(f"Unsupported profile field: {field}")
 
         user = await self.repo.update_profile(user_id, **{field: value})
+        if field in {"weight_kg", "height_cm"}:
+            user = await self._refresh_macro_basis_after_profile_change(user)
         if field != "first_name" and self._can_recalculate_norms(user):
             return await self.recalculate_norms(user_id)
         return user
@@ -111,6 +119,7 @@ class UserService:
             age=age,
             activity_level=ActivityLevel(_enum_value(user.activity_level)),
             goal=Goal(_enum_value(user.goal)),
+            macro_basis_weight_kg=user.macro_basis_weight_kg,
         )
         return await self.repo.update_profile(
             user_id,
@@ -118,6 +127,58 @@ class UserService:
             protein_norm=norms.protein_g,
             fat_norm=norms.fat_g,
             carb_norm=norms.carbs_g,
+        )
+
+    async def update_body_composition(
+        self,
+        user_id: int,
+        *,
+        neck_cm: float,
+        waist_cm: float,
+        hip_cm: float | None,
+        result: BodyCompositionResult,
+    ) -> User:
+        await self.repo.update_profile(
+            user_id,
+            neck_cm=neck_cm,
+            waist_cm=waist_cm,
+            hip_cm=hip_cm,
+            body_fat_percent=result.body_fat_percent,
+            lean_mass_kg=result.lean_mass_kg,
+            macro_basis_weight_kg=result.macro_basis_weight_kg,
+            body_composition_method=result.method,
+            body_composition_updated_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        return await self.recalculate_norms(user_id)
+
+    async def _refresh_macro_basis_after_profile_change(self, user: User) -> User:
+        if (
+            user.body_fat_percent is None
+            or user.weight_kg is None
+            or user.height_cm is None
+        ):
+            return user
+        try:
+            lean_mass_kg = round(
+                calculate_lean_mass(user.weight_kg, user.body_fat_percent),
+                1,
+            )
+            macro_basis_weight_kg = round(
+                select_macro_basis_weight(
+                    weight_kg=user.weight_kg,
+                    height_cm=user.height_cm,
+                    lean_mass_kg=lean_mass_kg,
+                ),
+                1,
+            )
+        except BodyCompositionError:
+            return user
+
+        return await self.repo.update_profile(
+            user.id,
+            lean_mass_kg=lean_mass_kg,
+            macro_basis_weight_kg=macro_basis_weight_kg,
+            body_composition_updated_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
     @staticmethod

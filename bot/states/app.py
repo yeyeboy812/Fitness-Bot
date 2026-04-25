@@ -62,6 +62,10 @@ class AppState(StatesGroup):
     # --- Profile / personalization flow -----------------------------------
     profile_value_input = State()
     profile_confirm = State()
+    profile_body_neck_input = State()
+    profile_body_waist_input = State()
+    profile_body_hip_input = State()
+    profile_body_confirm = State()
 
 
 # --- Main reply-menu label ------------------------------------------------
@@ -116,6 +120,10 @@ _INTERRUPTIBLE_APP_STATES: frozenset[State] = frozenset({
     AppState.workout_exercise_summary,
     AppState.profile_value_input,
     AppState.profile_confirm,
+    AppState.profile_body_neck_input,
+    AppState.profile_body_waist_input,
+    AppState.profile_body_hip_input,
+    AppState.profile_body_confirm,
 })
 
 _INTERRUPTIBLE_AUX_STATES: frozenset[State] = frozenset({

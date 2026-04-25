@@ -87,14 +87,18 @@ def adjust_for_goal(tdee: float, goal: Goal) -> int:
     return round(tdee * (1 + adjustment))
 
 
-def calculate_macros(calories: int, goal: Goal, weight_kg: float) -> MacroSplit:
+def calculate_macros(
+    calories: int,
+    goal: Goal,
+    weight_kg: float,
+    macro_basis_weight_kg: float | None = None,
+) -> MacroSplit:
     """Calculate macronutrient split.
 
     Protein: 1.8–2.2 g/kg depending on goal (higher during deficit to
              preserve muscle mass).
-    Fat:     0.9 g/kg of body weight (MVP default), hard-capped at
-             1.0 g/kg so the recommendation never gets disproportionately
-             high. Independent of total calories.
+    Fat:     0.9 g/kg of macro-basis weight (MVP default), kept inside
+             the 0.8–1.0 g/kg range. Independent of total calories.
     Carbs:   remaining calories / 4 (after protein and fat). Floored at 0
              when the deficit is too aggressive — never negative.
 
@@ -106,8 +110,10 @@ def calculate_macros(calories: int, goal: Goal, weight_kg: float) -> MacroSplit:
         Goal.gain: 2.0,
     }
 
-    protein_raw = weight_kg * protein_per_kg[goal]
-    fat_raw = min(weight_kg * FAT_G_PER_KG_STANDARD, weight_kg * FAT_G_PER_KG_MAX)
+    basis_weight = macro_basis_weight_kg if macro_basis_weight_kg else weight_kg
+    protein_raw = basis_weight * protein_per_kg[goal]
+    fat_per_kg = min(max(FAT_G_PER_KG_STANDARD, FAT_G_PER_KG_MIN), FAT_G_PER_KG_MAX)
+    fat_raw = basis_weight * fat_per_kg
 
     protein_g = _round_to_nearest_10(protein_raw)
     fat_g = _round_to_nearest_10(fat_raw)
@@ -130,9 +136,15 @@ def calculate_norms(
     age: int,
     activity_level: ActivityLevel,
     goal: Goal,
+    macro_basis_weight_kg: float | None = None,
 ) -> MacroSplit:
     """Full pipeline: BMR → TDEE → goal adjustment → macro split."""
     bmr = calculate_bmr(gender, weight_kg, height_cm, age)
     tdee = calculate_tdee(bmr, activity_level)
     target_calories = adjust_for_goal(tdee, goal)
-    return calculate_macros(target_calories, goal, weight_kg)
+    return calculate_macros(
+        target_calories,
+        goal,
+        weight_kg,
+        macro_basis_weight_kg=macro_basis_weight_kg,
+    )

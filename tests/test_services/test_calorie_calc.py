@@ -103,6 +103,17 @@ class TestMacros:
         # Sanity-check the constant used as MVP default.
         assert FAT_G_PER_KG_STANDARD == 0.9
 
+    def test_macro_basis_weight_overrides_protein_and_fat_basis(self):
+        macros = calculate_macros(
+            3000,
+            Goal.maintain,
+            weight_kg=140.0,
+            macro_basis_weight_kg=88.7,
+        )
+
+        assert macros.protein_g == 160
+        assert macros.fat_g == 80
+
 
 class TestFullPipeline:
     def test_calculate_norms(self):
@@ -123,6 +134,21 @@ class TestFullPipeline:
         assert norms.carbs_g % 10 == 0
         # Profile has enough calories for non-zero carbs at this weight.
         assert norms.carbs_g > 0
+
+    def test_calculate_norms_uses_macro_basis_weight_for_macros(self):
+        norms = calculate_norms(
+            gender=Gender.male,
+            weight_kg=140.0,
+            height_cm=178,
+            age=35,
+            activity_level=ActivityLevel.light,
+            goal=Goal.maintain,
+            macro_basis_weight_kg=88.7,
+        )
+
+        assert norms.protein_g == 160
+        assert norms.fat_g == 80
+        assert norms.fat_g < 130
 
     def test_recalc_uses_new_logic_after_weight_change(self):
         # Models the UserService.recalculate_norms code path (same call site).

@@ -947,12 +947,16 @@ async def on_quick_set_input(
     parsed = parse_weight_reps_input(message.text or "")
     if parsed is None:
         await message.answer(
-            "Не понял подход. Напиши, например: 93x15 или нажми «Ввести пошагово».",
+            "Не понял подход. Напиши, например: 93x15 или 200lb x 10.",
             reply_markup=quick_set_input_kb(),
         )
         return
 
-    await state.update_data(pending_weight=parsed.weight_kg)
+    await state.update_data(
+        pending_weight=parsed.weight_kg,
+        pending_input_value=parsed.original_weight_value,
+        pending_input_unit=parsed.original_weight_unit,
+    )
     await _save_set_and_show_action(
         message, state, session, user, reps=parsed.reps, duration=None
     )
@@ -963,7 +967,7 @@ async def on_weight_input(
     message: Message, state: FSMContext, user: User
 ) -> None:
     val = _parse_float(message.text or "")
-    if val is None or val < 0:
+    if val is None or val <= 0:
         await message.answer(
             "Введи вес числом, например: <code>60</code>",
             reply_markup=workout_back_kb(),
@@ -981,7 +985,7 @@ async def on_extra_weight_input(
     message: Message, state: FSMContext, user: User
 ) -> None:
     val = _parse_float(message.text or "")
-    if val is None or val < 0:
+    if val is None or val <= 0:
         await message.answer(
             "Введи доп. вес числом, например: <code>10</code>",
             reply_markup=workout_back_kb(),
@@ -1095,7 +1099,11 @@ def _render_confirmation_payload(s: dict) -> str:
         return f"{reps} повторений"
 
     weight = eff if eff is not None else s.get("weight")
-    return f"{_format_weight(float(weight or 0))} кг × {reps} повторений"
+    weight_kg_str = _format_weight(float(weight or 0))
+    if s.get("input_weight_unit") == "lb" and s.get("input_weight_value") is not None:
+        lb_str = _format_weight(float(s["input_weight_value"]))
+        return f"{lb_str} lb × {reps} повторений ≈ {weight_kg_str} кг"
+    return f"{weight_kg_str} кг × {reps} повторений"
 
 
 def _parse_uuid(value: object) -> UUID | None:
@@ -1178,6 +1186,8 @@ async def _save_set_and_show_action(
     pending_weight = data.get("pending_weight")
     pending_extra = data.get("pending_extra")
     bw_snapshot = data.get("pending_bw_snapshot")
+    pending_input_value = data.get("pending_input_value")
+    pending_input_unit = data.get("pending_input_unit")
 
     effective: float | None
     if load_mode == LOAD_EXTERNAL:
@@ -1197,6 +1207,8 @@ async def _save_set_and_show_action(
         "extra_weight": pending_extra,
         "user_body_weight_snapshot": bw_snapshot,
         "effective_weight": effective,
+        "input_weight_value": pending_input_value,
+        "input_weight_unit": pending_input_unit,
         "workout_id": str(workout_id),
         "workout_exercise_id": str(workout_exercise_id),
     }
@@ -1222,6 +1234,8 @@ async def _save_set_and_show_action(
         pending_weight=None,
         pending_extra=None,
         pending_bw_snapshot=None,
+        pending_input_value=None,
+        pending_input_unit=None,
     )
 
     confirm_payload = _render_confirmation_payload(set_entry)
@@ -1476,64 +1490,67 @@ async def on_finish_workout(
 
     finished_at = datetime.now(timezone.utc)
     started_at = _parse_started_at(data.get("workout_started_at"), fallback=finished_at)
-
-    workout = await workout_service.start_workout(
-        user_id=user.id,
-        workout_date=date.today(),
-        name=None,
-        started_at=started_at,
-        finished_at=finished_at,
-    )
-
-    total_sets = 0
-    total_volume = 0.0
-    for order, ex in enumerate(exercises, 1):
-        ex_id = ex.get("exercise_id")
-        try:
-            exercise_uuid = UUID(ex_id) if ex_id else None
-        except ValueError:
-            exercise_uuid = None
-        if exercise_uuid is not None:
-            we = await workout_service.attach_exercise(
-                workout_id=workout.id,
-                exercise_id=exercise_uuid,
-                order=order,
-            )
-        else:
-            we = await workout_service.add_exercise_to_workout(
-                workout_id=workout.id,
-                user_id=user.id,
-                exercise_name=ex.get("name") or "Без названия",
-                order=order,
-            )
-
-        for set_num, s in enumerate(ex["sets"], 1):
-            load_mode = s.get("load_mode")
-            reps = s.get("reps")
-            duration = s.get("duration")
-            effective = s.get("effective_weight")
-            await workout_service.log_set(
-                workout_exercise_id=we.id,
-                set_number=set_num,
-                weight_kg=effective if load_mode in (LOAD_EXTERNAL, LOAD_BW_OPT_EXTRA) else None,
-                reps=reps,
-                duration_seconds=duration,
-                load_mode=load_mode,
-                user_body_weight_snapshot=s.get("user_body_weight_snapshot"),
-                extra_weight_kg=s.get("extra_weight"),
-                effective_weight_kg=effective,
-            )
-            total_sets += 1
-            if effective and reps:
-                total_volume += float(effective) * int(reps)
-
+    total_sets, total_volume = _summarize_exercises(exercises)
     duration_minutes = max(1, round((finished_at - started_at).total_seconds() / 60))
-    workout.estimated_calories_burned = estimate_calories_burned(
+    estimated_calories = estimate_calories_burned(
         duration_minutes=duration_minutes,
         user_weight_kg=user.weight_kg,
         total_sets=total_sets,
         total_volume_kg=total_volume,
     )
+
+    workout_id = _parse_uuid(data.get("workout_id"))
+    workout = None
+    if workout_id is not None:
+        workout = await workout_service.finish_workout(
+            workout_id,
+            finished_at=finished_at,
+            estimated_calories_burned=estimated_calories,
+        )
+
+    if workout is None:
+        workout = await workout_service.start_workout(
+            user_id=user.id,
+            workout_date=date.today(),
+            name=None,
+            started_at=started_at,
+            finished_at=finished_at,
+            estimated_calories_burned=estimated_calories,
+        )
+        for order, ex in enumerate(exercises, 1):
+            exercise_uuid = _parse_uuid(ex.get("exercise_id"))
+            if exercise_uuid is not None:
+                we = await workout_service.attach_exercise(
+                    workout_id=workout.id,
+                    exercise_id=exercise_uuid,
+                    order=order,
+                )
+            else:
+                we = await workout_service.add_exercise_to_workout(
+                    workout_id=workout.id,
+                    user_id=user.id,
+                    exercise_name=ex.get("name") or "Без названия",
+                    order=order,
+                )
+
+            for set_num, s in enumerate(ex["sets"], 1):
+                load_mode = s.get("load_mode")
+                effective = s.get("effective_weight")
+                await workout_service.log_set(
+                    workout_exercise_id=we.id,
+                    set_number=set_num,
+                    weight_kg=(
+                        effective
+                        if load_mode in (LOAD_EXTERNAL, LOAD_BW_OPT_EXTRA)
+                        else None
+                    ),
+                    reps=s.get("reps"),
+                    duration_seconds=s.get("duration"),
+                    load_mode=load_mode,
+                    user_body_weight_snapshot=s.get("user_body_weight_snapshot"),
+                    extra_weight_kg=s.get("extra_weight"),
+                    effective_weight_kg=effective,
+                )
 
     await state.clear()
 
@@ -1547,7 +1564,7 @@ async def on_finish_workout(
         f"объём {total_volume:.0f} кг"
     )
     lines.append(
-        f"⏱ Время: {duration_minutes} мин · 🔥 ~{workout.estimated_calories_burned:.0f} ккал"
+        f"⏱ Время: {duration_minutes} мин · 🔥 ~{estimated_calories:.0f} ккал"
     )
 
     await callback.message.edit_text("\n".join(lines))

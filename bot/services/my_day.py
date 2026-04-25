@@ -145,6 +145,38 @@ def format_calories_line(calories_today: float, calorie_goal: int | None) -> str
     return f"{current} ккал"
 
 
+def _format_progress_value(value: float | int | None) -> int:
+    return max(int(round(float(value or 0))), 0)
+
+
+def _has_progress_target(value: float | int | None) -> bool:
+    return value is not None and value > 0
+
+
+def format_today_nutrition_progress(
+    *,
+    current_calories: float,
+    target_calories: int | None,
+    current_protein: float,
+    target_protein: int | None,
+    current_fat: float,
+    target_fat: int | None,
+    current_carbs: float,
+    target_carbs: int | None,
+) -> str:
+    targets = (target_calories, target_protein, target_fat, target_carbs)
+    if not all(_has_progress_target(target) for target in targets):
+        return "Сегодня пока нет данных по БЖУ."
+
+    return (
+        "Сегодня:\n"
+        f"🔥 {_format_progress_value(current_calories)} / {_format_progress_value(target_calories)} ккал\n"
+        f"🥩 Б: {_format_progress_value(current_protein)} / {_format_progress_value(target_protein)} г\n"
+        f"🥑 Ж: {_format_progress_value(current_fat)} / {_format_progress_value(target_fat)} г\n"
+        f"🍚 У: {_format_progress_value(current_carbs)} / {_format_progress_value(target_carbs)} г"
+    )
+
+
 def format_workout_line(workouts_today: int) -> str:
     n = max(int(workouts_today), 0)
     if n == 0:

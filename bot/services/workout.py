@@ -16,8 +16,16 @@ BASE_MET = 3.5
 HIGH_MET = 5.0
 HIGH_SETS_THRESHOLD = 20
 HIGH_VOLUME_KG_THRESHOLD = 8000.0
+LB_TO_KG = 0.45359237
+
+# Quick-set input grammar:
+#   <weight> [unit] x|х <reps>
+# Unit is optional (no unit = kg). lbs/lb/фунт*/ф map to pounds; everything
+# else (including missing) maps to kg. Decimals accept both '.' and ','.
 _WEIGHT_REPS_PATTERN = re.compile(
-    r"^\s*(?P<weight>\d+(?:[.,]\d+)?)\s*(?:кг|kg)?\s*[xх]\s*(?P<reps>\d+)\s*$",
+    r"^\s*(?P<weight>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>kg|кг|lbs|lb|фунт\w*|ф)?\s*"
+    r"[xх]\s*(?P<reps>\d+)\s*$",
     re.IGNORECASE,
 )
 
@@ -26,18 +34,44 @@ _WEIGHT_REPS_PATTERN = re.compile(
 class WeightRepsInput:
     weight_kg: float
     reps: int
+    original_weight_value: float
+    original_weight_unit: str  # "kg" | "lb"
+
+
+def _classify_unit(raw_unit: str) -> str:
+    """Map a parsed unit token to canonical 'kg' | 'lb'. Empty → 'kg'."""
+    token = (raw_unit or "").lower()
+    if token in ("lb", "lbs"):
+        return "lb"
+    if token == "ф" or token.startswith("фунт"):
+        return "lb"
+    return "kg"
 
 
 def parse_weight_reps_input(text: str) -> WeightRepsInput | None:
+    """Parse '<weight>[unit] x <reps>' into kg-canonical WeightRepsInput.
+
+    Returns None for unrecognized input or non-positive weight/reps. When the
+    user types lb/фунт, ``weight_kg`` is converted; ``original_weight_value``
+    and ``original_weight_unit`` preserve the typed form for confirmation UX.
+    """
     match = _WEIGHT_REPS_PATTERN.fullmatch(text or "")
     if match is None:
         return None
 
-    weight = float(match.group("weight").replace(",", "."))
+    weight_value = float(match.group("weight").replace(",", "."))
     reps = int(match.group("reps"))
-    if weight <= 0 or reps <= 0:
+    if weight_value <= 0 or reps <= 0:
         return None
-    return WeightRepsInput(weight_kg=weight, reps=reps)
+
+    unit = _classify_unit(match.group("unit") or "")
+    weight_kg = weight_value * LB_TO_KG if unit == "lb" else weight_value
+    return WeightRepsInput(
+        weight_kg=weight_kg,
+        reps=reps,
+        original_weight_value=weight_value,
+        original_weight_unit=unit,
+    )
 
 
 def estimate_calories_burned(
